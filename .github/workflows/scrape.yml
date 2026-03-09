@@ -1,0 +1,46 @@
+name: Weekly Research Radar Scrape
+
+on:
+  # Every Monday at 7:00 UTC (9:00 Helsinki time)
+  schedule:
+    - cron: '0 7 * * 1'
+
+  # Allow manual trigger
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install requests beautifulsoup4
+
+      - name: Run scraper
+        run: python scripts/scraper.py
+
+      - name: Commit and push results
+        run: |
+          git config user.name "Cloudberry Radar Bot"
+          git config user.email "radar@cloudberry.vc"
+          git add data/projects.json
+          # Only commit if there are changes
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "🫐 Weekly research radar scan — $(date -u +%Y-%m-%d)"
+            git push
+          fi

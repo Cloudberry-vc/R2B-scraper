@@ -1,0 +1,89 @@
+{
+  "last_updated": "2026-03-09T07:00:00+00:00",
+  "total": 4,
+  "by_category": {
+    "semiconductors": 3,
+    "photonics": 2,
+    "advanced_materials": 2,
+    "equipment": 1,
+    "quantum": 1
+  },
+  "by_country": {
+    "Finland": 3,
+    "Sweden": 1
+  },
+  "projects": [
+    {
+      "id": "a1b2c3d4e5f6",
+      "title": "Silicon Photonics Integration for Next-Generation Optical Interconnects",
+      "description": "This project develops novel silicon photonics integration techniques for high-bandwidth optical interconnects targeting data centre and telecommunications applications. The work combines advanced CMOS-compatible fabrication processes with innovative waveguide designs to achieve unprecedented data rates.",
+      "url": "https://research.aalto.fi/en/projects/example-photonics",
+      "source_name": "Aalto University Research Projects",
+      "source_org": "Aalto University",
+      "country": "Finland",
+      "contact_name": "Prof. Matti Virtanen",
+      "contact_email": "matti.virtanen@aalto.fi",
+      "is_relevant": true,
+      "status": "active",
+      "categories": ["photonics", "semiconductors"],
+      "matched_keywords": ["silicon photonics", "optical", "waveguide", "cmos", "fabrication"],
+      "relevance_score": 5,
+      "first_seen": "2026-03-09T07:00:00+00:00",
+      "last_seen": "2026-03-09T07:00:00+00:00"
+    },
+    {
+      "id": "b2c3d4e5f6g7",
+      "title": "Wide Bandgap Semiconductor Materials for Power Electronics",
+      "description": "Research programme investigating gallium nitride (GaN) and silicon carbide (SiC) based power semiconductor devices for energy-efficient power conversion. The project addresses crystal growth, device fabrication, and reliability testing of next-generation power devices.",
+      "url": "https://projects.tuni.fi/en/example-wbg",
+      "source_name": "Tampere University Research Projects",
+      "source_org": "Tampere University",
+      "country": "Finland",
+      "contact_name": "Dr. Anna Korhonen",
+      "contact_email": "anna.korhonen@tuni.fi",
+      "is_relevant": true,
+      "status": "active",
+      "categories": ["semiconductors", "advanced_materials"],
+      "matched_keywords": ["semiconductor", "gallium nitride", "gan", "silicon carbide", "sic", "crystal growth", "fabrication", "power electronics"],
+      "relevance_score": 8,
+      "first_seen": "2026-03-09T07:00:00+00:00",
+      "last_seen": "2026-03-09T07:00:00+00:00"
+    },
+    {
+      "id": "c3d4e5f6g7h8",
+      "title": "Atomic Layer Deposition of Functional Thin Films for Sensor Applications",
+      "description": "Development of novel ALD processes for depositing functional thin film materials with precisely controlled thickness and composition. Applications include gas sensors, biosensors, and optical coatings with enhanced performance characteristics.",
+      "url": "https://www.oulu.fi/en/research/example-ald",
+      "source_name": "University of Oulu Research Projects",
+      "source_org": "University of Oulu",
+      "country": "Finland",
+      "contact_name": "Prof. Jukka Mäkelä",
+      "contact_email": "jukka.makela@oulu.fi",
+      "is_relevant": true,
+      "status": "active",
+      "categories": ["equipment", "advanced_materials"],
+      "matched_keywords": ["atomic layer deposition", "ald", "thin film", "coating", "sensor", "optical"],
+      "relevance_score": 6,
+      "first_seen": "2026-03-09T07:00:00+00:00",
+      "last_seen": "2026-03-09T07:00:00+00:00"
+    },
+    {
+      "id": "d4e5f6g7h8i9",
+      "title": "III-V Semiconductor Nanowire Lasers for Integrated Photonic Circuits",
+      "description": "This project investigates the growth and characterization of III-V semiconductor nanowire lasers on silicon substrates, targeting monolithic integration with CMOS electronics for on-chip optical communication and sensing applications.",
+      "url": "https://portal.research.lu.se/en/projects/example-nanowire",
+      "source_name": "Lund University Research Projects (LUCRIS)",
+      "source_org": "Lund University",
+      "country": "Sweden",
+      "contact_name": "Prof. Erik Lindström",
+      "contact_email": "erik.lindstrom@ftf.lth.se",
+      "is_relevant": true,
+      "status": "active",
+      "categories": ["semiconductors", "photonics", "quantum"],
+      "matched_keywords": ["iii-v", "semiconductor", "nanowire", "laser", "silicon", "cmos", "photonic", "optical"],
+      "relevance_score": 8,
+      "first_seen": "2026-03-09T07:00:00+00:00",
+      "last_seen": "2026-03-09T07:00:00+00:00"
+    }
+  ]
+}

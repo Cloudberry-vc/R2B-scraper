@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Research Radar | Cloudberry VC</title>
+  <link rel="icon" href="assets/berry_icon.png" type="image/png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav class="navbar">
+    <div class="nav-left">
+      <img src="assets/logo_vc_light.png" alt="Cloudberry VC" class="nav-logo">
+    </div>
+    <div class="nav-center">
+      <span class="nav-title">Research Radar</span>
+    </div>
+    <div class="nav-right">
+      <span class="nav-updated" id="lastUpdated">Last scan: —</span>
+    </div>
+  </nav>
+
+  <!-- HERO STATS -->
+  <section class="stats-bar">
+    <div class="stat-card stat-flagged">
+      <div class="stat-number" id="statTotal">0</div>
+      <div class="stat-label">Active Qualifying Projects</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statNew">0</div>
+      <div class="stat-label">New This Week</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statCountries">0</div>
+      <div class="stat-label">Countries</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-number" id="statSources">0</div>
+      <div class="stat-label">Sources Monitored</div>
+    </div>
+  </section>
+
+  <!-- TOOLBAR -->
+  <section class="toolbar">
+    <div class="toolbar-left">
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" id="searchInput" placeholder="Search projects, contacts, universities...">
+      </div>
+    </div>
+    <div class="toolbar-right">
+      <div class="filter-group">
+        <select id="filterCountry">
+          <option value="all">All Countries</option>
+        </select>
+        <select id="filterUniversity">
+          <option value="all">All Sources</option>
+        </select>
+        <select id="filterCategory">
+          <option value="all">All Categories</option>
+          <option value="semiconductors">Semiconductors</option>
+          <option value="photonics">Photonics &amp; Optics</option>
+          <option value="advanced_materials">Advanced Materials</option>
+          <option value="equipment">Equipment &amp; Metrology</option>
+          <option value="quantum">Quantum</option>
+        </select>
+      </div>
+      <button class="btn btn-secondary" id="btnSources">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
+        Manage Sources
+      </button>
+    </div>
+  </section>
+
+  <!-- PROJECTS LIST -->
+  <section class="projects-container" id="projectsContainer">
+    <div class="empty-state" id="emptyState">
+      <img src="assets/berry_icon.png" alt="" class="empty-icon">
+      <h3>No projects yet</h3>
+      <p>The scraper has not run yet, or no projects matched your filters. Projects will appear here after the next Monday scan.</p>
+    </div>
+  </section>
+
+  <!-- SOURCES MODAL -->
+  <div class="modal-overlay" id="sourcesModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Manage Sources</h2>
+        <button class="modal-close" id="closeSourcesModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="add-source-form">
+          <h3>Add New Source</h3>
+          <div class="form-row">
+            <input type="text" id="newSourceName" placeholder="Source name (e.g. Aalto Research Projects)">
+            <input type="url" id="newSourceUrl" placeholder="URL to monitor (e.g. https://research.aalto.fi/en/projects/)">
+          </div>
+          <div class="form-row">
+            <input type="text" id="newSourceOrg" placeholder="Organization (e.g. Aalto University)">
+            <select id="newSourceCountry">
+              <option value="Finland">Finland</option>
+              <option value="Sweden">Sweden</option>
+              <option value="Norway">Norway</option>
+              <option value="Denmark">Denmark</option>
+              <option value="Netherlands">Netherlands</option>
+              <option value="Germany">Germany</option>
+              <option value="Other">Other</option>
+            </select>
+            <select id="newSourceType">
+              <option value="university">University</option>
+              <option value="research_org">Research Org</option>
+              <option value="funding_body">Funding Body</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btnAddSource">Add Source</button>
+        </div>
+
+        <hr class="modal-divider">
+
+        <div class="bulk-import-section">
+          <h3>Bulk Import</h3>
+          <div class="bulk-tabs">
+            <button class="bulk-tab active" data-tab="paste" id="tabPaste">Paste</button>
+            <button class="bulk-tab" data-tab="upload" id="tabUpload">Upload CSV / Excel</button>
+          </div>
+
+          <div class="bulk-panel" id="panelPaste">
+            <p class="bulk-hint">One source per line. Format: <code>name, url, organization, country, type</code><br>
+            Minimum: <code>name, url</code> (defaults: country=Finland, type=university, org=name)</p>
+            <textarea id="bulkPasteInput" rows="6" placeholder="Aalto Research Projects, https://research.aalto.fi/en/projects/, Aalto University, Finland, university
+TU Delft Projects, https://research.tudelft.nl/en/projects/, TU Delft, Netherlands, university"></textarea>
+            <button class="btn btn-primary" id="btnBulkPaste">Import Pasted Sources</button>
+          </div>
+
+          <div class="bulk-panel" id="panelUpload" style="display:none;">
+            <p class="bulk-hint">Upload a CSV or Excel file with columns: <code>name, url, organization, country, type</code><br>
+            First row should be headers. Only <code>name</code> and <code>url</code> are required.</p>
+            <div class="file-drop-zone" id="fileDropZone">
+              <input type="file" id="bulkFileInput" accept=".csv,.xlsx,.xls,.tsv" style="display:none;">
+              <p>Drop a file here or <a href="#" id="fileBrowseLink">browse</a></p>
+              <p class="bulk-hint">CSV, TSV, XLS, or XLSX</p>
+            </div>
+            <div id="bulkFilePreview" style="display:none;">
+              <p class="bulk-hint" id="bulkFileStatus"></p>
+              <button class="btn btn-primary" id="btnBulkUpload">Import From File</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="modal-divider">
+        <h3>Current Sources <span class="source-count" id="sourceCount">(0)</span></h3>
+        <div class="sources-list" id="sourcesList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROJECT DETAIL MODAL -->
+  <div class="modal-overlay" id="detailModal">
+    <div class="modal modal-detail">
+      <div class="modal-header">
+        <h2 id="detailTitle">Project Title</h2>
+        <button class="modal-close" id="closeDetailModal">&times;</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <footer class="footer">
+    <img src="assets/berry_icon.png" alt="" class="footer-icon">
+    <span>Cloudberry VC Research Radar</span>
+    <span class="footer-sep">|</span>
+    <span>Strictly Confidential</span>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
