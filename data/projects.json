@@ -1,7 +1,360 @@
 {
-  "last_updated": null,
-  "total": 0,
-  "by_category": {},
-  "by_country": {},
-  "projects": []
+  "last_updated": "2026-03-22T15:05:25.658200+00:00",
+  "total": 12,
+  "by_category": {
+    "semiconductors": 7,
+    "photonics": 6,
+    "advanced_materials": 4,
+    "equipment": 6,
+    "quantum": 7
+  },
+  "by_country": {
+    "Finland": 12
+  },
+  "projects": [
+    {
+      "id": "a2e1da822090",
+      "title": "SemiQon (2022)",
+      "description": "SemiQon intends to build Quantum processors from semiconductors and target the million qubit era, with SCALABILITY promise.",
+      "url": "https://www.semiqon.tech/",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "info@semiqon.tech",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "advanced_materials",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "quantum dot",
+        "chip",
+        "cmos",
+        "chips",
+        "quantum",
+        "semiconductor",
+        "silicon",
+        "semiconductors",
+        "qubit"
+      ],
+      "relevance_score": 9,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "368ce51000ac",
+      "title": "R&D infrastructure",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs View as a list View as a path Our tech&infra We have invested in top-notch R&D infrastructure so that you can concentrate on your core business. Explore our technologies below - how...",
+      "url": "https://www.vttresearch.com/en/technology-infrastructures",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "photonics",
+        "advanced_materials",
+        "equipment",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "characterization",
+        "polymer",
+        "photonics",
+        "quantum",
+        "metrology",
+        "composite",
+        "fabrication"
+      ],
+      "relevance_score": 7,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "a45e1b10b0e4",
+      "title": "Customer stories",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs Customer stories Explore our case stories and customer news to see how we build new business and find solutions to global challenges through science and technology - together with...",
+      "url": "https://www.vttresearch.com/en/news-and-stories/customer-stories",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "photonics",
+        "equipment",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "mems",
+        "metrology",
+        "quantum",
+        "waveguide",
+        "cleanroom",
+        "packaging"
+      ],
+      "relevance_score": 6,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "15927958f212",
+      "title": "TIMEKEEPER – Next-Gen Optical Timing Technology",
+      "description": "TIMEKEEPER Research to Business project is aiming towards developing and pre-commercializing all-optical timing technology with ENZ meta surfaces. Accurate time interval measurements and synchronization between two events are highly desirable in different fields of science and technology,...",
+      "url": "https://www.tuni.fi/en/research/timekeeper-next-gen-optical-timing-technology",
+      "source_name": "Tampere University",
+      "source_org": "Tampere University",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "rakesh.dhama@tuni.fi",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "photonics"
+      ],
+      "matched_keywords": [
+        "timekeeping",
+        "femtosecond",
+        "all-optical",
+        "optical",
+        "enz"
+      ],
+      "relevance_score": 5,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "db758159332d",
+      "title": "For media",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs For media We are happy to help! Please see the contact information for Communications below. We provide information and will find the right expert to answer your question. You can...",
+      "url": "https://www.vttresearch.com/en/news-stories/media",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "[email protected]",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "photonics",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "photonics",
+        "power electronics",
+        "quantum",
+        "microelectronics",
+        "semiconductor"
+      ],
+      "relevance_score": 5,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "9075bed9d627",
+      "title": "Arctic Instruments (2024)",
+      "description": "Arctic Instruments enables the construction of bigger and better quantum computers with superconducting microwave amplifiers.",
+      "url": "https://arcticinst.io/",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "advanced_materials",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "qubit",
+        "chip",
+        "superconducting",
+        "quantum"
+      ],
+      "relevance_score": 4,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "9f244fadc9fd",
+      "title": "For investors",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs For investors Many of the most significant Finnish technology startups were brought to life at VTT. In addition to empowering companies and organisations through R&D collaboration,...",
+      "url": "https://www.vttresearch.com/en/about-us/investors",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "photonics",
+        "advanced_materials",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "led",
+        "quantum",
+        "superconducting"
+      ],
+      "relevance_score": 3,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "f2baf880c747",
+      "title": "LaunchPad TeamHylasVisionHylasVision will revolutionize material detection with hyperspectral imaging and bring this fascinating technology to the mainstream machine vision market.",
+      "description": "HylasVision will revolutionize material detection with hyperspectral imaging and bring this fascinating technology to the mainstream machine vision market.",
+      "url": "https://www.vttresearch.com/en/about-us/invest-innovation/vtt-launchpad/hylasvision",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "[email protected]",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "photonics"
+      ],
+      "matched_keywords": [
+        "laser",
+        "optical",
+        "photonics"
+      ],
+      "relevance_score": 3,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "588273eb2c71",
+      "title": "PivotCore - Market‑ready control for industrial power conversion",
+      "description": "The project’s goal is to prepare a market-ready control technology for large industrial power-conversion equipment, so manufacturers and operators can adopt improved, lower-risk solutions that cut costs and speed deployment. Industrial converters increasingly face higher performance and operational...",
+      "url": "https://www.tuni.fi/en/research/pivotcore-market-ready-control-industrial-power-conversion",
+      "source_name": "Tampere University",
+      "source_org": "Tampere University",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "andrei.tregubov@tuni.fi",
+      "start_date": "00-0002",
+      "end_date": "1652-38",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "equipment"
+      ],
+      "matched_keywords": [
+        "power electronics",
+        "equipment"
+      ],
+      "relevance_score": 2,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "fc29f32936a5",
+      "title": "Industrial electrification",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs Accelerating industrial electrification As industries face mounting pressure to reduce carbon emissions and transition to sustainable practices, electrification emerges as a pivotal...",
+      "url": "https://www.vttresearch.com/en/explore/accelerating-industrial-electrification",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "[email protected]",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "equipment"
+      ],
+      "matched_keywords": [
+        "plasma",
+        "equipment"
+      ],
+      "relevance_score": 2,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "5047cd2ed4d2",
+      "title": "Knowledge Base",
+      "description": "Welcome back Want to pick up where you left off? Not the services you were looking for? Tell us more about your needs Knowledge Base Dig deeper into our extensive library of white papers and webinar recordings and turn knowledge into impact for your business. Landing pages Filter content by...",
+      "url": "https://www.vttresearch.com/en/news-stories/knowledge-base",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "equipment",
+        "quantum"
+      ],
+      "matched_keywords": [
+        "quantum",
+        "metrology"
+      ],
+      "relevance_score": 2,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    },
+    {
+      "id": "db068af09df2",
+      "title": "CooliBlade (2021)",
+      "description": "Extremely efficient cooling solution for high power electronics. Applicable to a large variety of product segments, where heat limits the performance.",
+      "url": "https://cooliblade.com/",
+      "source_name": "VTT Launchpad",
+      "source_org": "VTT Launchpad",
+      "country": "Finland",
+      "contact_name": "Feb 10, 2026 2:50:44 PM2 min read",
+      "contact_email": "",
+      "start_date": "",
+      "end_date": "",
+      "is_relevant": true,
+      "status": "active",
+      "categories": [
+        "semiconductors",
+        "equipment"
+      ],
+      "matched_keywords": [
+        "power electronics",
+        "equipment"
+      ],
+      "relevance_score": 2,
+      "first_seen": "2026-03-22T15:05:25.658200+00:00",
+      "last_seen": "2026-03-22T15:05:25.658200+00:00"
+    }
+  ]
 }
