@@ -328,60 +328,57 @@ def extract_projects(soup, base_url):
     return projects
 
 
-def clean_projects(projects):
+def _url_belongs_to_source(project_url, source_url):
     """
-    Post-extraction cleanup: remove noise that keyword matching alone can't catch.
-    Filters out generic service/marketing pages and fixes bad data.
+    Decide whether a project URL belongs to the source page.
+
+    Rules:
+    - Different domain → DROP (no alumni/external links)
+    - Same domain + source is a search page (has query params) → KEEP
+      (search results are the candidates, they may be under any path)
+    - Same domain + source is a content page → KEEP only if the project
+      URL path contains a key segment from the source URL path.
+      e.g. source /en/vtt-launchpad → keep /…/vtt-launchpad/biocoll,
+      drop /en/ourservices/foam-forming
+    """
+    source_parsed  = urlparse(source_url)
+    project_parsed = urlparse(project_url)
+
+    # Different domain → drop
+    if project_parsed.hostname != source_parsed.hostname:
+        return False
+
+    # Search page (has query params) → trust all same-domain links
+    if source_parsed.query:
+        return True
+
+    # Content page → path-segment filtering
+    LANG_CODES = {'en', 'fi', 'sv', 'da', 'no', 'de', 'nl', 'fr', 'is'}
+    source_segments = [
+        s for s in source_parsed.path.strip('/').split('/')
+        if s and s.lower() not in LANG_CODES
+    ]
+
+    if not source_segments:
+        # Source is at root → keep all same-domain
+        return True
+
+    project_path = project_parsed.path.lower()
+    return any(seg.lower() in project_path for seg in source_segments)
+
+
+def clean_projects(projects, source_url):
+    """
+    Post-extraction cleanup.
+    1. Path-prefix filter: only keep same-domain links under the source path
+    2. Fix bad contact names
     """
     cleaned = []
     for p in projects:
-        desc = p.get('description', '')
-        title = p.get('title', '')
         url = p.get('url', '')
 
-        # ── Skip boilerplate descriptions (cookie banners, nav chrome) ──
-        BOILERPLATE = [
-            'welcome back', 'pick up where you left off',
-            'not the services you were looking for',
-            'tell us more about your needs',
-            'accept all cookies', 'cookie settings',
-        ]
-        desc_lower = desc.lower()
-        if any(bp in desc_lower for bp in BOILERPLATE):
-            # Strip the boilerplate prefix, keep anything after it
-            for bp in BOILERPLATE:
-                idx = desc_lower.find(bp)
-                if idx >= 0:
-                    # Find the real content after boilerplate
-                    rest = desc[idx + len(bp):].strip()
-                    # Skip past repeated boilerplate chunks
-                    for bp2 in BOILERPLATE:
-                        if rest.lower().startswith(bp2):
-                            rest = rest[len(bp2):].strip()
-                    p['description'] = rest[:500] if len(rest) > 20 else ''
-                    break
-
-        # ── Skip generic service/index/nav pages ──
-        url_lower = url.lower()
-        GENERIC_URL_PATTERNS = [
-            '/ourservices', '/industries', '/all-services',
-            '/service/', '/tjanster/', '/palvelut/',
-            '/about-us/', '/about/', '/contact', '/careers',
-            '/news-and-ideas/', '/news/', '/blog/', '/press',
-            '/media/', '/for-media', '/for-investors',
-            '/subscribe', '/newsletter',
-        ]
-        if any(pat in url_lower for pat in GENERIC_URL_PATTERNS):
-            continue
-
-        # ── Skip generic nav-style titles ──
-        GENERIC_TITLES = [
-            'industries', 'all services', 'customer stories',
-            'knowledge base', 'for media', 'for investors',
-            'r&d infrastructure', 'contact us', 'about us',
-            'news', 'blog', 'press', 'careers', 'events',
-        ]
-        if title.lower().strip() in GENERIC_TITLES:
+        # ── Path-prefix filter ──
+        if not _url_belongs_to_source(url, source_url):
             continue
 
         # ── Fix bad contact names (timestamps, button labels, etc.) ──
@@ -393,7 +390,6 @@ def clean_projects(projects):
             ]
             if any(bc in contact.lower() for bc in BAD_CONTACTS):
                 p['contact_name'] = ''
-            # If contact looks like a date/timestamp, clear it
             if re.search(r'\d{1,2}:\d{2}', contact):
                 p['contact_name'] = ''
 
@@ -563,7 +559,7 @@ def main():
         if not soup:
             continue
 
-        raw_projects = clean_projects(extract_projects(soup, source['url']))
+        raw_projects = clean_projects(extract_projects(soup, source['url']), source['url'])
         print(f"  Found {len(raw_projects)} project(s) on listing page")
 
         for raw in raw_projects:
