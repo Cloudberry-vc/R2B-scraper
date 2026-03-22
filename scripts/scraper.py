@@ -328,6 +328,66 @@ def extract_projects(soup, base_url):
     return projects
 
 
+def clean_projects(projects):
+    """
+    Post-extraction cleanup: remove noise that keyword matching alone can't catch.
+    Filters out generic service/marketing pages and fixes bad data.
+    """
+    cleaned = []
+    for p in projects:
+        desc = p.get('description', '')
+        title = p.get('title', '')
+        url = p.get('url', '')
+
+        # ── Skip boilerplate descriptions (cookie banners, nav chrome) ──
+        BOILERPLATE = [
+            'welcome back', 'pick up where you left off',
+            'not the services you were looking for',
+            'tell us more about your needs',
+            'accept all cookies', 'cookie settings',
+        ]
+        desc_lower = desc.lower()
+        if any(bp in desc_lower for bp in BOILERPLATE):
+            # Strip the boilerplate prefix, keep anything after it
+            for bp in BOILERPLATE:
+                idx = desc_lower.find(bp)
+                if idx >= 0:
+                    # Find the real content after boilerplate
+                    rest = desc[idx + len(bp):].strip()
+                    # Skip past repeated boilerplate chunks
+                    for bp2 in BOILERPLATE:
+                        if rest.lower().startswith(bp2):
+                            rest = rest[len(bp2):].strip()
+                    p['description'] = rest[:500] if len(rest) > 20 else ''
+                    break
+
+        # ── Skip generic service/index pages ──
+        url_lower = url.lower()
+        GENERIC_URL_PATTERNS = [
+            '/ourservices', '/industries', '/all-services',
+            '/service/', '/tjanster/', '/palvelut/',
+        ]
+        if any(pat in url_lower for pat in GENERIC_URL_PATTERNS):
+            continue
+
+        # ── Fix bad contact names (timestamps, button labels, etc.) ──
+        contact = p.get('contact_name', '')
+        if contact:
+            BAD_CONTACTS = [
+                'view profile', 'read more', 'learn more', 'min read',
+                'cookie', 'subscribe', 'contact form',
+            ]
+            if any(bc in contact.lower() for bc in BAD_CONTACTS):
+                p['contact_name'] = ''
+            # If contact looks like a date/timestamp, clear it
+            if re.search(r'\d{1,2}:\d{2}', contact):
+                p['contact_name'] = ''
+
+        cleaned.append(p)
+
+    return cleaned
+
+
 # ──────────────────────────────────────────────
 # DETAIL PAGE EXTRACTION
 # ──────────────────────────────────────────────
@@ -489,7 +549,7 @@ def main():
         if not soup:
             continue
 
-        raw_projects = extract_projects(soup, source['url'])
+        raw_projects = clean_projects(extract_projects(soup, source['url']))
         print(f"  Found {len(raw_projects)} project(s) on listing page")
 
         for raw in raw_projects:
