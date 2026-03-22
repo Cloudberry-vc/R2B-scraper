@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
 Cloudberry VC Research Radar — Weekly Scraper
-Fetches research project pages from Nordic universities,
-extracts ACTIVE project info, and only keeps projects that
-qualify against the Cloudberry thesis.
 
-Output: only thesis-relevant, active projects.
+Fetches research project pages from user-supplied URLs,
+extracts project info using multiple flexible strategies,
+classifies against the Cloudberry thesis keywords, and
+keeps only active, qualifying projects.
+
+Output: data/projects.json — active, thesis-relevant projects only.
 """
 
 import json
@@ -17,11 +19,10 @@ from datetime import datetime, timezone
 from urllib.parse import urljoin, urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, Tag
 
 # ──────────────────────────────────────────────
 # CLOUDBERRY THESIS KEYWORDS
-# Loaded from keywords.json so the UI can also manage them
 # ──────────────────────────────────────────────
 
 KEYWORDS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'keywords.json')
@@ -36,87 +37,10 @@ def load_keywords():
 
 KEYWORD_MAP = load_keywords()
 
-# Minimum keyword matches required for a project to qualify.
-# A single generic hit (e.g. "silicon" in a biology context) is not enough.
-MIN_KEYWORD_HITS = 2          # at least 2 distinct keyword matches
-MIN_CATEGORIES   = 1          # across at least 1 category
+MIN_KEYWORD_HITS = 2
+MIN_CATEGORIES   = 1
 
-# ──────────────────────────────────────────────
-# ACTIVE PROJECT DETECTION
-# Words/phrases that signal a project is finished, cancelled, or archived
-# ──────────────────────────────────────────────
-
-INACTIVE_SIGNALS = re.compile(
-    r'\b('
-    r'completed|finished|ended|closed|archived|concluded|terminated|'
-    r'päättynyt|avslutad|afsluttet|'           # Finnish / Swedish / Danish
-    r'final report|slutrapport|loppuraportti'
-    r')\b',
-    re.IGNORECASE
-)
-
-# Date patterns: "01/2020 – 12/2023" or "2019-01-01 to 2022-12-31" etc.
-DATE_RANGE_RE = re.compile(
-    r'(\d{1,2}[/.-]\d{4}|\d{4}[/.-]\d{1,2}(?:[/.-]\d{1,2})?)'
-    r'\s*[\u2013\u2014\-–—to]+\s*'
-    r'(\d{1,2}[/.-]\d{4}|\d{4}[/.-]\d{1,2}(?:[/.-]\d{1,2})?)'
-)
-
-# Explicit "Status: Active" / "Status: Ongoing" patterns
-ACTIVE_SIGNALS = re.compile(
-    r'\b(active|ongoing|running|in progress|current|käynnissä|pågående|igangværende)\b',
-    re.IGNORECASE
-)
-
-
-def _parse_fuzzy_date(s):
-    """Try to extract a year from a fuzzy date string."""
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%Y', '%Y-%m', '%d.%m.%Y', '%m.%Y', '%Y'):
-        try:
-            return datetime.strptime(s.strip(), fmt)
-        except ValueError:
-            continue
-    # Last resort: just grab a 4-digit year
-    m = re.search(r'(20\d{2})', s)
-    if m:
-        return datetime(int(m.group(1)), 12, 31)
-    return None
-
-
-def is_project_active(title, description, detail_text=''):
-    """
-    Determine whether a project appears to be active/ongoing.
-    Returns (is_active: bool, status_hint: str).
-
-    Logic:
-    1. If there's an explicit "Status: Active/Ongoing" → active
-    2. If there's an explicit "completed/finished/ended" → inactive
-    3. If there's an end date in the past → inactive
-    4. If there's an end date in the future or no end date → active (benefit of doubt)
-    """
-    combined = f"{title} {description} {detail_text}"
-
-    # Check explicit active signals
-    if ACTIVE_SIGNALS.search(combined):
-        return True, 'active_signal'
-
-    # Check explicit inactive signals
-    if INACTIVE_SIGNALS.search(combined):
-        return False, 'inactive_signal'
-
-    # Check date ranges
-    now = datetime.now()
-    date_matches = DATE_RANGE_RE.findall(combined)
-    for start_str, end_str in date_matches:
-        end_date = _parse_fuzzy_date(end_str)
-        if end_date and end_date < now:
-            return False, f'ended_{end_str}'
-
-    # No strong signal either way → assume active
-    return True, 'assumed_active'
-
-
-# Compile all keywords into regex patterns per category
+# Compile keyword patterns
 CATEGORY_PATTERNS = {}
 for cat, keywords in KEYWORD_MAP.items():
     escaped = [re.escape(kw) for kw in keywords]
@@ -124,7 +48,58 @@ for cat, keywords in KEYWORD_MAP.items():
     CATEGORY_PATTERNS[cat] = (pattern, keywords)
 
 # ──────────────────────────────────────────────
-# SCRAPING
+# ACTIVE PROJECT DETECTION
+# ──────────────────────────────────────────────
+
+INACTIVE_SIGNALS = re.compile(
+    r'\b('
+    r'completed|finished|ended|closed|archived|concluded|terminated|'
+    r'päättynyt|avslutad|afsluttet|'
+    r'final report|slutrapport|loppuraportti'
+    r')\b',
+    re.IGNORECASE
+)
+
+DATE_RANGE_RE = re.compile(
+    r'(\d{1,2}[/.-]\d{4}|\d{4}[/.-]\d{1,2}(?:[/.-]\d{1,2})?)'
+    r'\s*[\u2013\u2014\-–—to]+\s*'
+    r'(\d{1,2}[/.-]\d{4}|\d{4}[/.-]\d{1,2}(?:[/.-]\d{1,2})?)'
+)
+
+ACTIVE_SIGNALS = re.compile(
+    r'\b(active|ongoing|running|in progress|current|käynnissä|pågående|igangværende)\b',
+    re.IGNORECASE
+)
+
+
+def _parse_fuzzy_date(s):
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%Y', '%Y-%m', '%d.%m.%Y', '%m.%Y', '%Y'):
+        try:
+            return datetime.strptime(s.strip(), fmt)
+        except ValueError:
+            continue
+    m = re.search(r'(20\d{2})', s)
+    if m:
+        return datetime(int(m.group(1)), 12, 31)
+    return None
+
+
+def is_project_active(title, description, detail_text=''):
+    combined = f"{title} {description} {detail_text}"
+    if ACTIVE_SIGNALS.search(combined):
+        return True, 'active_signal'
+    if INACTIVE_SIGNALS.search(combined):
+        return False, 'inactive_signal'
+    now = datetime.now()
+    for start_str, end_str in DATE_RANGE_RE.findall(combined):
+        end_date = _parse_fuzzy_date(end_str)
+        if end_date and end_date < now:
+            return False, f'ended_{end_str}'
+    return True, 'assumed_active'
+
+
+# ──────────────────────────────────────────────
+# HTTP
 # ──────────────────────────────────────────────
 
 HEADERS = {
@@ -133,8 +108,16 @@ HEADERS = {
     'Accept-Language': 'en,fi,sv,da;q=0.9',
 }
 
+# Links to skip (nav, social, chrome)
+SKIP_HREF_PATTERNS = [
+    'login', 'sign-in', 'cookie', 'privacy', 'contact-us', 'terms',
+    'facebook', 'twitter', 'linkedin', 'instagram', 'youtube',
+    '.jpg', '.png', '.gif', '.svg', '.pdf', '.css', '.js',
+    '#', 'javascript:', 'mailto:', 'tel:',
+]
+
+
 def fetch_page(url, timeout=30):
-    """Fetch a URL and return BeautifulSoup object."""
     try:
         resp = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
         resp.raise_for_status()
@@ -144,135 +127,310 @@ def fetch_page(url, timeout=30):
         return None
 
 
-def extract_projects_generic(soup, base_url, source):
+def _is_skip_link(href):
+    href_lower = href.lower()
+    return any(s in href_lower for s in SKIP_HREF_PATTERNS)
+
+
+def _find_nearest_text(el, selector_hints, max_chars=500):
+    """Try multiple ways to find descriptive text near an element."""
+    # 1. Direct child or sibling <p> / description element
+    for hint in selector_hints:
+        found = el.select_one(hint) if isinstance(el, Tag) else None
+        if found:
+            txt = found.get_text(strip=True)[:max_chars]
+            if len(txt) > 20:
+                return txt
+    # 2. Any <p> inside the container
+    for p in (el.select('p') if isinstance(el, Tag) else []):
+        txt = p.get_text(strip=True)[:max_chars]
+        if len(txt) > 20:
+            return txt
+    return ''
+
+
+def _find_date_text(el):
+    """Try to find date/period text near an element."""
+    if not isinstance(el, Tag):
+        return ''
+    for sel in ['.date', '.period', 'time', '.meta', '.result-date',
+                '[class*="date"]', '[class*="period"]', '[class*="time"]']:
+        found = el.select_one(sel)
+        if found:
+            return found.get_text(strip=True)
+    return ''
+
+
+def _find_status_text(el):
+    """Try to find status badge/label near an element."""
+    if not isinstance(el, Tag):
+        return ''
+    for sel in ['.status', '.badge', '.label', '.project-status', '.tag',
+                '[class*="status"]', '[class*="badge"]']:
+        found = el.select_one(sel)
+        if found:
+            return found.get_text(strip=True)
+    return ''
+
+
+def _find_contact(el):
+    """Try to find a contact name near an element."""
+    if not isinstance(el, Tag):
+        return ''
+    for sel in ['.person-list a', '.result-persons a', '.author a', '.author',
+                '.person-name', '.contact-name', '.researcher-name', '.pi-name',
+                '[class*="person"]', '[class*="author"]', '[class*="contact"]']:
+        found = el.select_one(sel)
+        if found:
+            txt = found.get_text(strip=True)
+            if txt and len(txt) > 2:
+                return txt
+    return ''
+
+
+DESC_HINTS = [
+    '.result-description', '.rendering-description', '.description',
+    '.card-text', '.summary', '.field-content', '.excerpt', '.teaser',
+    '.abstract', '.intro', '[class*="desc"]', '[class*="summary"]',
+    '[class*="abstract"]', '[class*="excerpt"]',
+]
+
+
+# ──────────────────────────────────────────────
+# PROJECT EXTRACTION — multiple strategies
+# ──────────────────────────────────────────────
+
+def extract_projects(soup, base_url):
     """
-    Generic project extractor. Looks for structured project listings
-    in common patterns used by university research portals.
+    Extract project listings from a page using multiple strategies,
+    from most specific to most generic. Stops at the first strategy
+    that finds results.
+
+    Strategies are based on STRUCTURAL patterns (link + heading combos)
+    rather than specific CSS class names, so they work across
+    different CMSes, React/Next.js sites, Drupal, WordPress,
+    Pure/CRIS portals, and plain HTML.
     """
     projects = []
+    seen_urls = set()
 
-    # Strategy 1: Pure/CRIS portal listings (used by many Nordic unis)
-    for container in soup.select('.result-container .list-result-item, .rendering, .result-container li'):
-        title_el = container.select_one('h3 a, h2 a, .result-title a, a.link')
-        if not title_el:
-            continue
-        title = title_el.get_text(strip=True)
-        link = urljoin(base_url, title_el.get('href', ''))
-        desc = ''
-        desc_el = container.select_one('.result-description, .rendering-description, p')
-        if desc_el:
-            desc = desc_el.get_text(strip=True)[:500]
-
-        # Try to find date/status info
-        date_el = container.select_one('.date, .period, .result-date, time')
-        date_text = date_el.get_text(strip=True) if date_el else ''
-
-        # Status badge (some portals have "Active" / "Finished" labels)
-        status_el = container.select_one('.status, .badge, .label, .project-status')
-        status_text = status_el.get_text(strip=True) if status_el else ''
-
-        person_el = container.select_one('.person-list a, .result-persons a, .author a')
-        contact_name = person_el.get_text(strip=True) if person_el else ''
-
+    def _add(title, url, desc='', contact='', date_text='', status_text=''):
+        if not title or not url:
+            return
+        if url in seen_urls:
+            return
+        seen_urls.add(url)
         projects.append({
-            'title': title,
-            'description': desc,
-            'url': link,
-            'contact_name': contact_name,
+            'title': title.strip(),
+            'description': desc.strip()[:500],
+            'url': url,
+            'contact_name': contact.strip(),
             'contact_email': '',
             '_date_text': date_text,
             '_status_text': status_text,
         })
 
-    # Strategy 2: Card/grid layouts
-    if not projects:
-        for card in soup.select('.card, .project-card, .item, article.post, .view-content .views-row'):
-            title_el = card.select_one('h2 a, h3 a, .card-title a, .title a, a.card-link')
-            if not title_el:
-                title_el = card.select_one('h2, h3, .card-title, .title')
-            if not title_el:
+    # ── Strategy 1: Data-attribute cards (React/Next.js sites) ──
+    # Sites like tuni.fi use data-gtm="search-item" or data-testid, etc.
+    for attr in ['data-gtm', 'data-testid', 'data-id', 'data-entity-id']:
+        for card in soup.select(f'[{attr}]'):
+            link_el = card.select_one('a[href]')
+            heading = card.select_one('h1, h2, h3, h4')
+            if not link_el or not heading:
                 continue
-            title = title_el.get_text(strip=True)
-            link_el = title_el if title_el.name == 'a' else card.select_one('a')
-            link = urljoin(base_url, link_el.get('href', '')) if link_el else base_url
-            desc_el = card.select_one('p, .description, .card-text, .summary, .field-content')
-            desc = desc_el.get_text(strip=True)[:500] if desc_el else ''
-
-            date_el = card.select_one('.date, .period, time, .meta')
-            date_text = date_el.get_text(strip=True) if date_el else ''
-
-            projects.append({
-                'title': title,
-                'description': desc,
-                'url': link,
-                'contact_name': '',
-                'contact_email': '',
-                '_date_text': date_text,
-                '_status_text': '',
-            })
-
-    # Strategy 3: Link-based fallback — broader matching for project-style URLs
-    if not projects:
-        seen_titles = set()
-        seen_urls = set()
-        PROJECT_URL_HINTS = [
-            'project', 'research', 'tutkimus', 'hanke', 'forskning', 'projekt',
-            'r2b', 'tutli', 'pre-commerci', 'innovation', 'startup',
-        ]
-        for link_el in soup.select('a[href]'):
+            title = heading.get_text(strip=True)
             href = link_el.get('href', '')
-            text = link_el.get_text(strip=True)
-            full_url = urljoin(base_url, href)
-            if len(text) < 5 or len(text) > 200:
+            if not title or len(title) < 3 or _is_skip_link(href):
                 continue
-            if text in seen_titles or full_url in seen_urls:
-                continue
-            href_lower = href.lower()
-            # Skip nav, footer, social, image links
-            if any(skip in href_lower for skip in [
-                'login', 'sign-in', 'cookie', 'privacy', 'contact-us',
-                'facebook', 'twitter', 'linkedin', 'instagram', 'youtube',
-                '.jpg', '.png', '.pdf', '#', 'javascript:',
-            ]):
-                continue
-            if any(kw in href_lower for kw in PROJECT_URL_HINTS):
-                seen_titles.add(text)
-                seen_urls.add(full_url)
-                projects.append({
-                    'title': text,
-                    'description': '',
-                    'url': full_url,
-                    'contact_name': '',
-                    'contact_email': '',
-                    '_date_text': '',
-                    '_status_text': '',
-                })
+            url = urljoin(base_url, href)
+            desc = _find_nearest_text(card, DESC_HINTS)
+            _add(title, url, desc, _find_contact(card),
+                 _find_date_text(card), _find_status_text(card))
+
+    if projects:
+        return projects
+
+    # ── Strategy 2: <a> wrapping a heading (very common pattern) ──
+    # The entire card is a link with an <h2>/<h3> inside it.
+    for link_el in soup.select('a[href]'):
+        heading = link_el.select_one('h1, h2, h3, h4')
+        if not heading:
+            continue
+        title = heading.get_text(strip=True)
+        href = link_el.get('href', '')
+        if not title or len(title) < 3 or _is_skip_link(href):
+            continue
+        url = urljoin(base_url, href)
+        # Look for description inside the link or in parent container
+        desc = _find_nearest_text(link_el, DESC_HINTS)
+        parent = link_el.parent
+        if not desc and parent:
+            desc = _find_nearest_text(parent, DESC_HINTS)
+        _add(title, url, desc, _find_contact(link_el.parent or link_el),
+             _find_date_text(link_el.parent or link_el),
+             _find_status_text(link_el.parent or link_el))
+
+    if projects:
+        return projects
+
+    # ── Strategy 3: Heading containing a link (traditional HTML) ──
+    # <h2><a href="...">Title</a></h2> with description nearby.
+    for heading in soup.select('h1 a[href], h2 a[href], h3 a[href], h4 a[href]'):
+        title = heading.get_text(strip=True)
+        href = heading.get('href', '')
+        if not title or len(title) < 3 or _is_skip_link(href):
+            continue
+        url = urljoin(base_url, href)
+        # Walk up to the container (the heading's grandparent is usually the card)
+        container = heading.parent  # the <h2>
+        if container:
+            container = container.parent  # the card/li/div
+        desc = _find_nearest_text(container, DESC_HINTS) if container else ''
+        _add(title, url, desc,
+             _find_contact(container) if container else '',
+             _find_date_text(container) if container else '',
+             _find_status_text(container) if container else '')
+
+    if projects:
+        return projects
+
+    # ── Strategy 4: Pure/CRIS portal selectors ──
+    # Many Nordic universities use Elsevier Pure / CRIS.
+    for container in soup.select(
+        '.result-container .list-result-item, .rendering, '
+        '.result-container li, .list-results li, '
+        '.portal-body .result-container li'
+    ):
+        title_el = container.select_one(
+            'h3 a, h2 a, .result-title a, a.link, .title a'
+        )
+        if not title_el:
+            continue
+        title = title_el.get_text(strip=True)
+        href = title_el.get('href', '')
+        if not title or _is_skip_link(href):
+            continue
+        url = urljoin(base_url, href)
+        desc = _find_nearest_text(container, DESC_HINTS)
+        _add(title, url, desc, _find_contact(container),
+             _find_date_text(container), _find_status_text(container))
+
+    if projects:
+        return projects
+
+    # ── Strategy 5: Generic card/grid containers ──
+    for card in soup.select(
+        '.card, .project-card, .item, article, '
+        '.view-content .views-row, .search-result, '
+        '[class*="card"], [class*="result"], [class*="item"]'
+    ):
+        # Need a link and some text that looks like a title
+        link_el = card.select_one('a[href]')
+        if not link_el:
+            continue
+        href = link_el.get('href', '')
+        if _is_skip_link(href):
+            continue
+        # Try heading first, fall back to link text
+        heading = card.select_one('h1, h2, h3, h4, h5')
+        if heading:
+            title = heading.get_text(strip=True)
+        else:
+            title = link_el.get_text(strip=True)
+        if not title or len(title) < 5 or len(title) > 300:
+            continue
+        url = urljoin(base_url, href)
+        desc = _find_nearest_text(card, DESC_HINTS)
+        _add(title, url, desc, _find_contact(card),
+             _find_date_text(card), _find_status_text(card))
+
+    if projects:
+        return projects
+
+    # ── Strategy 6: Link-based fallback ──
+    # Grab any link whose URL or text hints at a project page.
+    PROJECT_URL_HINTS = [
+        'project', 'research', 'tutkimus', 'hanke', 'forskning', 'projekt',
+        'r2b', 'tutli', 'pre-commerci', 'innovation', 'startup',
+    ]
+    seen_titles = set()
+    for link_el in soup.select('a[href]'):
+        href = link_el.get('href', '')
+        text = link_el.get_text(strip=True)
+        if not text or len(text) < 5 or len(text) > 200:
+            continue
+        if _is_skip_link(href):
+            continue
+        full_url = urljoin(base_url, href)
+        if text in seen_titles or full_url in seen_urls:
+            continue
+        href_lower = href.lower()
+        text_lower = text.lower()
+        if any(kw in href_lower or kw in text_lower for kw in PROJECT_URL_HINTS):
+            seen_titles.add(text)
+            _add(text, full_url)
 
     return projects
 
 
+# ──────────────────────────────────────────────
+# DETAIL PAGE EXTRACTION
+# ──────────────────────────────────────────────
+
 def fetch_detail_page(url):
-    """Fetch a project detail page and return full text + contact info."""
+    """
+    Fetch a project detail page. Returns (full_text, contact_name, contact_email).
+    Uses multiple strategies to extract content from different site structures.
+    """
     soup = fetch_page(url)
     if not soup:
         return '', '', ''
 
-    # Full text for active/relevance checking
-    main_el = soup.select_one('main, #content, .content, article')
-    full_text = main_el.get_text(' ', strip=True)[:3000] if main_el else soup.get_text(' ', strip=True)[:3000]
+    # ── Full text ──
+    # Try progressively broader selectors for the main content area
+    full_text = ''
+    for sel in ['main article', 'main', '#content', '.content',
+                'article', '[role="main"]', '.page-content',
+                '.node-content', '.entry-content', '.post-content']:
+        el = soup.select_one(sel)
+        if el:
+            full_text = el.get_text(' ', strip=True)[:3000]
+            if len(full_text) > 100:
+                break
+    if not full_text:
+        # Last resort: full page text minus script/style/nav
+        for tag in soup.select('script, style, nav, header, footer'):
+            tag.decompose()
+        full_text = soup.get_text(' ', strip=True)[:3000]
 
-    # Extract email
+    # ── Email ──
     email = ''
-    email_links = soup.select('a[href^="mailto:"]')
-    if email_links:
-        email = email_links[0].get('href', '').replace('mailto:', '').split('?')[0]
-
-    # Extract contact name
-    name = ''
-    for el in soup.select('.person-name, .contact-name, .author, .researcher-name, .pi-name'):
-        name = el.get_text(strip=True)
-        if name:
+    for mailto in soup.select('a[href^="mailto:"]'):
+        addr = mailto.get('href', '').replace('mailto:', '').split('?')[0].strip()
+        if '@' in addr:
+            email = addr
             break
+
+    # ── Contact name ──
+    name = ''
+    # Try specific selectors first
+    for sel in ['.person-name', '.contact-name', '.author', '.researcher-name',
+                '.pi-name', '.field-name-field-contact', '.responsible-person',
+                '[class*="person-name"]', '[class*="contact"]',
+                '[class*="author"]', '[class*="researcher"]']:
+        el = soup.select_one(sel)
+        if el:
+            txt = el.get_text(strip=True)
+            if txt and 3 < len(txt) < 80:
+                name = txt
+                break
+    # If no name found but we have an email link, try its visible text
+    if not name and email:
+        for mailto in soup.select('a[href^="mailto:"]'):
+            txt = mailto.get_text(strip=True)
+            if txt and '@' not in txt and 3 < len(txt) < 80:
+                name = txt
+                break
 
     return full_text, name, email
 
@@ -282,18 +440,7 @@ def fetch_detail_page(url):
 # ──────────────────────────────────────────────
 
 def classify_project(title, description, detail_text=''):
-    """
-    Classify a project against the Cloudberry thesis keywords.
-    Uses title + description + detail page text.
-
-    Requires at least MIN_KEYWORD_HITS distinct keyword matches
-    to qualify. This avoids false positives from a single generic
-    word like "silicon" in an unrelated biology paper.
-
-    Returns (qualifies, categories, matched_keywords, score).
-    """
     text = f"{title} {description} {detail_text}".lower()
-
     categories = []
     matched_keywords = []
 
@@ -306,17 +453,11 @@ def classify_project(title, description, detail_text=''):
 
     unique_keywords = list(set(matched_keywords))
     score = len(unique_keywords)
-
-    qualifies = (
-        len(categories) >= MIN_CATEGORIES
-        and score >= MIN_KEYWORD_HITS
-    )
-
+    qualifies = len(categories) >= MIN_CATEGORIES and score >= MIN_KEYWORD_HITS
     return qualifies, categories, unique_keywords, score
 
 
 def make_id(title, url):
-    """Generate a stable ID for deduplication."""
     raw = f"{title.lower().strip()}|{url.lower().strip()}"
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
@@ -326,9 +467,9 @@ def make_id(title, url):
 # ──────────────────────────────────────────────
 
 def main():
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    repo_root    = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sources_path = os.path.join(repo_root, 'sources.json')
-    data_path = os.path.join(repo_root, 'data', 'projects.json')
+    data_path    = os.path.join(repo_root, 'data', 'projects.json')
 
     with open(sources_path, 'r') as f:
         sources = json.load(f)
@@ -360,36 +501,37 @@ def main():
         if not soup:
             continue
 
-        raw_projects = extract_projects_generic(soup, source['url'], source)
-        print(f"  Found {len(raw_projects)} raw project(s)")
+        raw_projects = extract_projects(soup, source['url'])
+        print(f"  Found {len(raw_projects)} project(s) on listing page")
 
         for raw in raw_projects:
             pid = make_id(raw['title'], raw['url'])
 
-            # ── Step 1: Quick relevance pre-check on title+description ──
-            quick_qualifies, _, _, quick_score = classify_project(
+            # ── Quick pre-check on title + whatever description we got ──
+            has_description = len(raw.get('description', '')) > 30
+            _, _, _, quick_score = classify_project(
                 raw['title'], raw.get('description', '')
             )
 
-            # If zero keyword hits AND the URL doesn't hint at a relevant project,
-            # skip to avoid fetching thousands of unrelated detail pages.
-            # But if the URL contains thesis-related terms, still fetch the detail page.
-            if quick_score == 0:
-                url_lower = raw.get('url', '').lower()
+            # If we have no description, always fetch the detail page —
+            # many listing pages only show a title.
+            # If we have a description and zero keyword hits, check URL/title hints.
+            if quick_score == 0 and has_description:
+                url_lower   = raw.get('url', '').lower()
                 title_lower = raw.get('title', '').lower()
-                URL_RELEVANCE_HINTS = [
+                RELEVANCE_HINTS = [
                     'photon', 'optic', 'laser', 'semiconductor', 'quantum',
                     'nano', 'material', 'chip', 'wafer', 'sensor', 'metrol',
                     'r2b', 'pre-commerci', 'tutli', 'erc', 'deep-tech',
-                    'deeptech', 'commerciali',
+                    'deeptech', 'commerciali', 'thin film', 'plasma',
+                    'epitax', 'lithograph', 'crystal',
                 ]
-                has_url_hint = any(h in url_lower or h in title_lower for h in URL_RELEVANCE_HINTS)
-                if not has_url_hint:
+                if not any(h in url_lower or h in title_lower for h in RELEVANCE_HINTS):
                     stats['skipped_irrelevant'] += 1
                     continue
 
-            # ── Step 2: Fetch detail page for borderline/qualifying projects ──
-            detail_text = ''
+            # ── Fetch detail page ──
+            detail_text  = ''
             contact_name = raw.get('contact_name', '')
             contact_email = raw.get('contact_email', '')
 
@@ -399,8 +541,12 @@ def main():
                     contact_name = det_name
                 if det_email and not contact_email:
                     contact_email = det_email
+                # If we still have no description, use a snippet from detail page
+                if not has_description and detail_text:
+                    # Take first ~300 chars as description
+                    raw['description'] = detail_text[:300].rsplit(' ', 1)[0] + '...'
 
-            # ── Step 3: Full classification with detail text ──
+            # ── Full classification with detail text ──
             qualifies, categories, matched_kw, score = classify_project(
                 raw['title'], raw.get('description', ''), detail_text
             )
@@ -409,7 +555,7 @@ def main():
                 stats['skipped_irrelevant'] += 1
                 continue
 
-            # ── Step 4: Active check ──
+            # ── Active check ──
             combined_status = f"{raw.get('_date_text', '')} {raw.get('_status_text', '')}"
             active, status_hint = is_project_active(
                 raw['title'], raw.get('description', ''),
@@ -419,13 +565,12 @@ def main():
             if not active:
                 stats['skipped_inactive'] += 1
                 print(f"  ✗ INACTIVE: {raw['title'][:60]}... ({status_hint})")
-                # If it was previously tracked, mark it inactive but keep it
                 if pid in existing_projects:
                     existing_projects[pid]['status'] = 'inactive'
                     existing_projects[pid]['last_seen'] = now
                 continue
 
-            # ── Step 5: Store qualifying, active project ──
+            # ── Store qualifying, active project ──
             if pid in existing_projects:
                 existing = existing_projects[pid]
                 existing['last_seen'] = now
@@ -437,6 +582,9 @@ def main():
                     existing['contact_name'] = contact_name
                 if contact_email and not existing.get('contact_email'):
                     existing['contact_email'] = contact_email
+                # Update description if we got a better one
+                if raw.get('description') and len(raw['description']) > len(existing.get('description', '')):
+                    existing['description'] = raw['description']
                 stats['updated'] += 1
             else:
                 existing_projects[pid] = {
@@ -446,7 +594,7 @@ def main():
                     'url': raw.get('url', ''),
                     'source_name': source['name'],
                     'source_org': source.get('organization', source['name']),
-                    'country': source.get('country', 'Finland'),
+                    'country': source.get('country', ''),
                     'contact_name': contact_name,
                     'contact_email': contact_email,
                     'is_relevant': True,
@@ -462,13 +610,11 @@ def main():
 
         print()
 
-    # ── Build output: only active, qualifying projects ──
+    # ── Build output ──
     active_projects = [
         p for p in existing_projects.values()
         if p.get('status', 'active') == 'active' and p.get('is_relevant', False)
     ]
-
-    # Sort by relevance score (highest first), then newest
     active_projects.sort(key=lambda p: (-p.get('relevance_score', 0), p.get('first_seen', '')))
 
     os.makedirs(os.path.dirname(data_path), exist_ok=True)
@@ -482,10 +628,8 @@ def main():
         'by_country': {},
         'projects': active_projects,
     }
-
-    # Count by country
     for p in active_projects:
-        c = p.get('country', 'Unknown')
+        c = p.get('country', 'Unknown') or 'Unknown'
         output['by_country'][c] = output['by_country'].get(c, 0) + 1
 
     with open(data_path, 'w') as f:
@@ -497,13 +641,11 @@ def main():
     print(f"Updated: {stats['updated']}")
     print(f"Skipped (not relevant): {stats['skipped_irrelevant']}")
     print(f"Skipped (inactive/ended): {stats['skipped_inactive']}")
-    print(f"")
-    print(f"By category:")
-    for cat, count in output['by_category'].items():
-        print(f"  {cat}: {count}")
-    print(f"By country:")
-    for country, count in output['by_country'].items():
-        print(f"  {country}: {count}")
+    print()
+    for label, data in [('By category', output['by_category']), ('By country', output['by_country'])]:
+        print(f"{label}:")
+        for k, v in data.items():
+            print(f"  {k}: {v}")
 
 
 if __name__ == '__main__':
