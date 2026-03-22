@@ -251,7 +251,7 @@ function updateStats() {
     allProjects.filter(p => !reviews[p.id]).length;
   document.getElementById('statSources').textContent = allSources.length;
 
-  const countries = [...new Set(accepted.map(p => p.country).filter(Boolean))];
+  const countries = [...new Set(accepted.map(p => resolveSource(p).country).filter(Boolean))];
   document.getElementById('statCountries').textContent = countries.length;
 }
 

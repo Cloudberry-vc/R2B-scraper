@@ -1,66 +1,7 @@
 {
-  "last_updated": "2026-03-22T14:14:45.416443+00:00",
-  "total": 2,
-  "by_category": {
-    "semiconductors": 1,
-    "photonics": 1,
-    "advanced_materials": 0,
-    "equipment": 1,
-    "quantum": 0
-  },
-  "by_country": {
-    "Unknown": 2
-  },
-  "projects": [
-    {
-      "id": "15927958f212",
-      "title": "TIMEKEEPER – Next-Gen Optical Timing Technology",
-      "description": "TIMEKEEPER Research to Business project is aiming towards developing and pre-commercializing all-optical timing technology with ENZ meta surfaces. Accurate time interval measurements and synchronization between two events are highly desirable in different fields of science and technology,...",
-      "url": "https://www.tuni.fi/en/research/timekeeper-next-gen-optical-timing-technology",
-      "source_name": "Tampere Tuni r2b",
-      "source_org": "Tampere Tuni r2b",
-      "country": "",
-      "contact_name": "",
-      "contact_email": "",
-      "is_relevant": true,
-      "status": "active",
-      "categories": [
-        "photonics"
-      ],
-      "matched_keywords": [
-        "all-optical",
-        "optical",
-        "enz",
-        "femtosecond",
-        "timekeeping"
-      ],
-      "relevance_score": 5,
-      "first_seen": "2026-03-22T14:06:43.588658+00:00",
-      "last_seen": "2026-03-22T14:14:45.416443+00:00"
-    },
-    {
-      "id": "588273eb2c71",
-      "title": "PivotCore - Market‑ready control for industrial power conversion",
-      "description": "The project’s goal is to prepare a market-ready control technology for large industrial power-conversion equipment, so manufacturers and operators can adopt improved, lower-risk solutions that cut costs and speed deployment. Industrial converters increasingly face higher performance and operational...",
-      "url": "https://www.tuni.fi/en/research/pivotcore-market-ready-control-industrial-power-conversion",
-      "source_name": "Tampere Tuni r2b",
-      "source_org": "Tampere Tuni r2b",
-      "country": "",
-      "contact_name": "",
-      "contact_email": "",
-      "is_relevant": true,
-      "status": "active",
-      "categories": [
-        "semiconductors",
-        "equipment"
-      ],
-      "matched_keywords": [
-        "equipment",
-        "power electronics"
-      ],
-      "relevance_score": 2,
-      "first_seen": "2026-03-22T14:06:43.588658+00:00",
-      "last_seen": "2026-03-22T14:14:45.416443+00:00"
-    }
-  ]
+  "last_updated": null,
+  "total": 0,
+  "by_category": {},
+  "by_country": {},
+  "projects": []
 }
