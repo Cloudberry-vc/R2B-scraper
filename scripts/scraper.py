@@ -7,6 +7,9 @@ extracts project info using multiple flexible strategies,
 classifies against the Cloudberry thesis keywords, and
 keeps only active, qualifying projects.
 
+Incremental: skips detail-page fetches for projects already in the database.
+Only new (unseen) projects get their detail pages fetched and classified.
+
 Output: data/projects.json — active, thesis-relevant projects only.
 """
 
@@ -108,7 +111,6 @@ HEADERS = {
     'Accept-Language': 'en,fi,sv,da;q=0.9',
 }
 
-# Links to skip (nav, social, chrome)
 SKIP_HREF_PATTERNS = [
     'login', 'sign-in', 'cookie', 'privacy', 'contact-us', 'terms',
     'facebook', 'twitter', 'linkedin', 'instagram', 'youtube',
@@ -133,15 +135,12 @@ def _is_skip_link(href):
 
 
 def _find_nearest_text(el, selector_hints, max_chars=500):
-    """Try multiple ways to find descriptive text near an element."""
-    # 1. Direct child or sibling <p> / description element
     for hint in selector_hints:
         found = el.select_one(hint) if isinstance(el, Tag) else None
         if found:
             txt = found.get_text(strip=True)[:max_chars]
             if len(txt) > 20:
                 return txt
-    # 2. Any <p> inside the container
     for p in (el.select('p') if isinstance(el, Tag) else []):
         txt = p.get_text(strip=True)[:max_chars]
         if len(txt) > 20:
@@ -150,7 +149,6 @@ def _find_nearest_text(el, selector_hints, max_chars=500):
 
 
 def _find_date_text(el):
-    """Try to find date/period text near an element."""
     if not isinstance(el, Tag):
         return ''
     for sel in ['.date', '.period', 'time', '.meta', '.result-date',
@@ -162,7 +160,6 @@ def _find_date_text(el):
 
 
 def _find_status_text(el):
-    """Try to find status badge/label near an element."""
     if not isinstance(el, Tag):
         return ''
     for sel in ['.status', '.badge', '.label', '.project-status', '.tag',
@@ -174,7 +171,6 @@ def _find_status_text(el):
 
 
 def _find_contact(el):
-    """Try to find a contact name near an element."""
     if not isinstance(el, Tag):
         return ''
     for sel in ['.person-list a', '.result-persons a', '.author a', '.author',
@@ -201,23 +197,11 @@ DESC_HINTS = [
 # ──────────────────────────────────────────────
 
 def extract_projects(soup, base_url):
-    """
-    Extract project listings from a page using multiple strategies,
-    from most specific to most generic. Stops at the first strategy
-    that finds results.
-
-    Strategies are based on STRUCTURAL patterns (link + heading combos)
-    rather than specific CSS class names, so they work across
-    different CMSes, React/Next.js sites, Drupal, WordPress,
-    Pure/CRIS portals, and plain HTML.
-    """
     projects = []
     seen_urls = set()
 
     def _add(title, url, desc='', contact='', date_text='', status_text=''):
-        if not title or not url:
-            return
-        if url in seen_urls:
+        if not title or not url or url in seen_urls:
             return
         seen_urls.add(url)
         projects.append({
@@ -230,8 +214,7 @@ def extract_projects(soup, base_url):
             '_status_text': status_text,
         })
 
-    # ── Strategy 1: Data-attribute cards (React/Next.js sites) ──
-    # Sites like tuni.fi use data-gtm="search-item" or data-testid, etc.
+    # Strategy 1: Data-attribute cards (React/Next.js)
     for attr in ['data-gtm', 'data-testid', 'data-id', 'data-entity-id']:
         for card in soup.select(f'[{attr}]'):
             link_el = card.select_one('a[href]')
@@ -243,15 +226,12 @@ def extract_projects(soup, base_url):
             if not title or len(title) < 3 or _is_skip_link(href):
                 continue
             url = urljoin(base_url, href)
-            desc = _find_nearest_text(card, DESC_HINTS)
-            _add(title, url, desc, _find_contact(card),
-                 _find_date_text(card), _find_status_text(card))
-
+            _add(title, url, _find_nearest_text(card, DESC_HINTS),
+                 _find_contact(card), _find_date_text(card), _find_status_text(card))
     if projects:
         return projects
 
-    # ── Strategy 2: <a> wrapping a heading (very common pattern) ──
-    # The entire card is a link with an <h2>/<h3> inside it.
+    # Strategy 2: <a> wrapping a heading
     for link_el in soup.select('a[href]'):
         heading = link_el.select_one('h1, h2, h3, h4')
         if not heading:
@@ -261,94 +241,73 @@ def extract_projects(soup, base_url):
         if not title or len(title) < 3 or _is_skip_link(href):
             continue
         url = urljoin(base_url, href)
-        # Look for description inside the link or in parent container
         desc = _find_nearest_text(link_el, DESC_HINTS)
         parent = link_el.parent
         if not desc and parent:
             desc = _find_nearest_text(parent, DESC_HINTS)
-        _add(title, url, desc, _find_contact(link_el.parent or link_el),
-             _find_date_text(link_el.parent or link_el),
-             _find_status_text(link_el.parent or link_el))
-
+        _add(title, url, desc, _find_contact(parent or link_el),
+             _find_date_text(parent or link_el), _find_status_text(parent or link_el))
     if projects:
         return projects
 
-    # ── Strategy 3: Heading containing a link (traditional HTML) ──
-    # <h2><a href="...">Title</a></h2> with description nearby.
+    # Strategy 3: Heading containing a link
     for heading in soup.select('h1 a[href], h2 a[href], h3 a[href], h4 a[href]'):
         title = heading.get_text(strip=True)
         href = heading.get('href', '')
         if not title or len(title) < 3 or _is_skip_link(href):
             continue
         url = urljoin(base_url, href)
-        # Walk up to the container (the heading's grandparent is usually the card)
-        container = heading.parent  # the <h2>
+        container = heading.parent
         if container:
-            container = container.parent  # the card/li/div
-        desc = _find_nearest_text(container, DESC_HINTS) if container else ''
-        _add(title, url, desc,
+            container = container.parent
+        _add(title, url,
+             _find_nearest_text(container, DESC_HINTS) if container else '',
              _find_contact(container) if container else '',
              _find_date_text(container) if container else '',
              _find_status_text(container) if container else '')
-
     if projects:
         return projects
 
-    # ── Strategy 4: Pure/CRIS portal selectors ──
-    # Many Nordic universities use Elsevier Pure / CRIS.
+    # Strategy 4: Pure/CRIS portal selectors
     for container in soup.select(
         '.result-container .list-result-item, .rendering, '
         '.result-container li, .list-results li, '
         '.portal-body .result-container li'
     ):
-        title_el = container.select_one(
-            'h3 a, h2 a, .result-title a, a.link, .title a'
-        )
+        title_el = container.select_one('h3 a, h2 a, .result-title a, a.link, .title a')
         if not title_el:
             continue
         title = title_el.get_text(strip=True)
         href = title_el.get('href', '')
         if not title or _is_skip_link(href):
             continue
-        url = urljoin(base_url, href)
-        desc = _find_nearest_text(container, DESC_HINTS)
-        _add(title, url, desc, _find_contact(container),
-             _find_date_text(container), _find_status_text(container))
-
+        _add(title, urljoin(base_url, href), _find_nearest_text(container, DESC_HINTS),
+             _find_contact(container), _find_date_text(container), _find_status_text(container))
     if projects:
         return projects
 
-    # ── Strategy 5: Generic card/grid containers ──
+    # Strategy 5: Generic card/grid containers
     for card in soup.select(
         '.card, .project-card, .item, article, '
         '.view-content .views-row, .search-result, '
         '[class*="card"], [class*="result"], [class*="item"]'
     ):
-        # Need a link and some text that looks like a title
         link_el = card.select_one('a[href]')
         if not link_el:
             continue
         href = link_el.get('href', '')
         if _is_skip_link(href):
             continue
-        # Try heading first, fall back to link text
         heading = card.select_one('h1, h2, h3, h4, h5')
-        if heading:
-            title = heading.get_text(strip=True)
-        else:
-            title = link_el.get_text(strip=True)
+        title = heading.get_text(strip=True) if heading else link_el.get_text(strip=True)
         if not title or len(title) < 5 or len(title) > 300:
             continue
-        url = urljoin(base_url, href)
-        desc = _find_nearest_text(card, DESC_HINTS)
-        _add(title, url, desc, _find_contact(card),
-             _find_date_text(card), _find_status_text(card))
-
+        _add(title, urljoin(base_url, href), _find_nearest_text(card, DESC_HINTS),
+             _find_contact(card), _find_date_text(card), _find_status_text(card))
     if projects:
         return projects
 
-    # ── Strategy 6: Link-based fallback ──
-    # Grab any link whose URL or text hints at a project page.
+    # Strategy 6: Link-based fallback
     PROJECT_URL_HINTS = [
         'project', 'research', 'tutkimus', 'hanke', 'forskning', 'projekt',
         'r2b', 'tutli', 'pre-commerci', 'innovation', 'startup',
@@ -357,16 +316,12 @@ def extract_projects(soup, base_url):
     for link_el in soup.select('a[href]'):
         href = link_el.get('href', '')
         text = link_el.get_text(strip=True)
-        if not text or len(text) < 5 or len(text) > 200:
-            continue
-        if _is_skip_link(href):
+        if not text or len(text) < 5 or len(text) > 200 or _is_skip_link(href):
             continue
         full_url = urljoin(base_url, href)
         if text in seen_titles or full_url in seen_urls:
             continue
-        href_lower = href.lower()
-        text_lower = text.lower()
-        if any(kw in href_lower or kw in text_lower for kw in PROJECT_URL_HINTS):
+        if any(kw in href.lower() or kw in text.lower() for kw in PROJECT_URL_HINTS):
             seen_titles.add(text)
             _add(text, full_url)
 
@@ -379,15 +334,14 @@ def extract_projects(soup, base_url):
 
 def fetch_detail_page(url):
     """
-    Fetch a project detail page. Returns (full_text, contact_name, contact_email).
-    Uses multiple strategies to extract content from different site structures.
+    Fetch a project detail page.
+    Returns (full_text, contact_name, contact_email, start_date, end_date).
     """
     soup = fetch_page(url)
     if not soup:
-        return '', '', ''
+        return '', '', '', '', ''
 
     # ── Full text ──
-    # Try progressively broader selectors for the main content area
     full_text = ''
     for sel in ['main article', 'main', '#content', '.content',
                 'article', '[role="main"]', '.page-content',
@@ -398,7 +352,6 @@ def fetch_detail_page(url):
             if len(full_text) > 100:
                 break
     if not full_text:
-        # Last resort: full page text minus script/style/nav
         for tag in soup.select('script, style, nav, header, footer'):
             tag.decompose()
         full_text = soup.get_text(' ', strip=True)[:3000]
@@ -413,7 +366,6 @@ def fetch_detail_page(url):
 
     # ── Contact name ──
     name = ''
-    # Try specific selectors first
     for sel in ['.person-name', '.contact-name', '.author', '.researcher-name',
                 '.pi-name', '.field-name-field-contact', '.responsible-person',
                 '[class*="person-name"]', '[class*="contact"]',
@@ -424,7 +376,6 @@ def fetch_detail_page(url):
             if txt and 3 < len(txt) < 80:
                 name = txt
                 break
-    # If no name found but we have an email link, try its visible text
     if not name and email:
         for mailto in soup.select('a[href^="mailto:"]'):
             txt = mailto.get_text(strip=True)
@@ -432,7 +383,15 @@ def fetch_detail_page(url):
                 name = txt
                 break
 
-    return full_text, name, email
+    # ── Start / end dates ──
+    start_date = ''
+    end_date = ''
+    date_matches = DATE_RANGE_RE.findall(full_text)
+    if date_matches:
+        start_date = date_matches[0][0].strip()
+        end_date = date_matches[0][1].strip()
+
+    return full_text, name, email, start_date, end_date
 
 
 # ──────────────────────────────────────────────
@@ -485,11 +444,12 @@ def main():
         pass
 
     now = datetime.now(timezone.utc).isoformat()
-    stats = {'new': 0, 'updated': 0, 'skipped_inactive': 0, 'skipped_irrelevant': 0}
+    stats = {'new': 0, 'skipped_known': 0, 'skipped_inactive': 0, 'skipped_irrelevant': 0}
 
     print(f"=== Cloudberry Research Radar Scraper ===")
     print(f"Time: {now}")
     print(f"Sources: {len(sources)}")
+    print(f"Existing projects in DB: {len(existing_projects)}")
     print(f"Qualification: min {MIN_KEYWORD_HITS} keyword hits, min {MIN_CATEGORIES} category")
     print()
 
@@ -507,15 +467,18 @@ def main():
         for raw in raw_projects:
             pid = make_id(raw['title'], raw['url'])
 
+            # ── INCREMENTAL: skip projects we already know ──
+            if pid in existing_projects:
+                existing_projects[pid]['last_seen'] = now
+                stats['skipped_known'] += 1
+                continue
+
             # ── Quick pre-check on title + whatever description we got ──
             has_description = len(raw.get('description', '')) > 30
             _, _, _, quick_score = classify_project(
                 raw['title'], raw.get('description', '')
             )
 
-            # If we have no description, always fetch the detail page —
-            # many listing pages only show a title.
-            # If we have a description and zero keyword hits, check URL/title hints.
             if quick_score == 0 and has_description:
                 url_lower   = raw.get('url', '').lower()
                 title_lower = raw.get('title', '').lower()
@@ -530,20 +493,24 @@ def main():
                     stats['skipped_irrelevant'] += 1
                     continue
 
-            # ── Fetch detail page ──
-            detail_text  = ''
-            contact_name = raw.get('contact_name', '')
+            # ── Fetch detail page (only for NEW projects) ──
+            detail_text   = ''
+            contact_name  = raw.get('contact_name', '')
             contact_email = raw.get('contact_email', '')
+            start_date    = ''
+            end_date      = ''
 
             if raw.get('url') and raw['url'] != source['url']:
-                detail_text, det_name, det_email = fetch_detail_page(raw['url'])
+                detail_text, det_name, det_email, det_start, det_end = fetch_detail_page(raw['url'])
                 if det_name and not contact_name:
                     contact_name = det_name
                 if det_email and not contact_email:
                     contact_email = det_email
-                # If we still have no description, use a snippet from detail page
+                if det_start:
+                    start_date = det_start
+                if det_end:
+                    end_date = det_end
                 if not has_description and detail_text:
-                    # Take first ~300 chars as description
                     raw['description'] = detail_text[:300].rsplit(' ', 1)[0] + '...'
 
             # ── Full classification with detail text ──
@@ -565,48 +532,31 @@ def main():
             if not active:
                 stats['skipped_inactive'] += 1
                 print(f"  ✗ INACTIVE: {raw['title'][:60]}... ({status_hint})")
-                if pid in existing_projects:
-                    existing_projects[pid]['status'] = 'inactive'
-                    existing_projects[pid]['last_seen'] = now
                 continue
 
-            # ── Store qualifying, active project ──
-            if pid in existing_projects:
-                existing = existing_projects[pid]
-                existing['last_seen'] = now
-                existing['status'] = 'active'
-                existing['categories'] = categories
-                existing['matched_keywords'] = matched_kw
-                existing['relevance_score'] = score
-                if contact_name and not existing.get('contact_name'):
-                    existing['contact_name'] = contact_name
-                if contact_email and not existing.get('contact_email'):
-                    existing['contact_email'] = contact_email
-                # Update description if we got a better one
-                if raw.get('description') and len(raw['description']) > len(existing.get('description', '')):
-                    existing['description'] = raw['description']
-                stats['updated'] += 1
-            else:
-                existing_projects[pid] = {
-                    'id': pid,
-                    'title': raw['title'],
-                    'description': raw.get('description', ''),
-                    'url': raw.get('url', ''),
-                    'source_name': source['name'],
-                    'source_org': source.get('organization', source['name']),
-                    'country': source.get('country', ''),
-                    'contact_name': contact_name,
-                    'contact_email': contact_email,
-                    'is_relevant': True,
-                    'status': 'active',
-                    'categories': categories,
-                    'matched_keywords': matched_kw,
-                    'relevance_score': score,
-                    'first_seen': now,
-                    'last_seen': now,
-                }
-                stats['new'] += 1
-                print(f"  ★ NEW: {raw['title'][:60]}... [{', '.join(categories)}] (score: {score})")
+            # ── Store qualifying, active, NEW project ──
+            existing_projects[pid] = {
+                'id': pid,
+                'title': raw['title'],
+                'description': raw.get('description', ''),
+                'url': raw.get('url', ''),
+                'source_name': source['name'],
+                'source_org': source.get('organization', source['name']),
+                'country': source.get('country', ''),
+                'contact_name': contact_name,
+                'contact_email': contact_email,
+                'start_date': start_date,
+                'end_date': end_date,
+                'is_relevant': True,
+                'status': 'active',
+                'categories': categories,
+                'matched_keywords': matched_kw,
+                'relevance_score': score,
+                'first_seen': now,
+                'last_seen': now,
+            }
+            stats['new'] += 1
+            print(f"  ★ NEW: {raw['title'][:60]}... [{', '.join(categories)}] (score: {score})")
 
         print()
 
@@ -638,7 +588,7 @@ def main():
     print(f"=== Done ===")
     print(f"Active, qualifying projects: {len(active_projects)}")
     print(f"New this run: {stats['new']}")
-    print(f"Updated: {stats['updated']}")
+    print(f"Already known (skipped): {stats['skipped_known']}")
     print(f"Skipped (not relevant): {stats['skipped_irrelevant']}")
     print(f"Skipped (inactive/ended): {stats['skipped_inactive']}")
     print()

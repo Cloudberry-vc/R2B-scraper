@@ -1,6 +1,6 @@
 /* ============================================
    Cloudberry VC Research Radar — App Logic
-   All listed projects are active & thesis-qualifying.
+   Three-tab workflow: NEW → ACCEPTED / DECLINED
    ============================================ */
 
 const DATA_URL     = 'data/projects.json';
@@ -10,7 +10,7 @@ const KEYWORDS_URL = 'keywords.json';
 let allProjects = [];
 let allSources  = [];
 let allKeywords = {};
-let dataMetadata = {};
+let activeTab   = 'new';   // 'new' | 'accepted' | 'declined'
 
 // ---- GitHub Config (stored in localStorage) ----
 const GH_CONFIG_KEY = 'cloudberry_gh_config';
@@ -19,7 +19,6 @@ function getGHConfig() {
   try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || 'null'); }
   catch { return null; }
 }
-
 function saveGHConfig(token, repo, branch) {
   localStorage.setItem(GH_CONFIG_KEY, JSON.stringify({ token, repo, branch: branch || 'main' }));
 }
@@ -38,7 +37,6 @@ async function ghReadFile(filePath) {
 async function ghWriteFile(filePath, content, message, sha) {
   const cfg = getGHConfig();
   if (!cfg) throw new Error('GitHub not configured.');
-  // btoa with UTF-8 support
   const encoded = btoa(unescape(encodeURIComponent(content)));
   const res = await fetch(
     `https://api.github.com/repos/${cfg.repo}/contents/${filePath}`,
@@ -59,28 +57,43 @@ async function ghWriteFile(filePath, content, message, sha) {
   return res.json();
 }
 
-// ---- Dismissed Projects (persisted in localStorage) ----
-const DISMISSED_KEY = 'cloudberry_dismissed_projects';
+// ---- Review Status (persisted in localStorage) ----
+// Maps project ID → 'accepted' | 'declined'
+// Projects not in this map are 'new'.
+const REVIEW_KEY = 'cloudberry_reviews';
 
-function getDismissedIds() {
-  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); }
-  catch { return []; }
+function getReviews() {
+  try { return JSON.parse(localStorage.getItem(REVIEW_KEY) || '{}'); }
+  catch { return {}; }
 }
-function dismissProject(id) {
-  const dismissed = getDismissedIds();
-  if (!dismissed.includes(id)) {
-    dismissed.push(id);
-    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed));
-  }
-  renderProjects();
-  updateStats();
-  showToast('Project dismissed. It won\'t appear again.');
+function setReview(id, status) {
+  const reviews = getReviews();
+  reviews[id] = status;
+  localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
 }
-function undismissAll() {
-  localStorage.removeItem(DISMISSED_KEY);
+function getProjectStatus(id) {
+  return getReviews()[id] || 'new';
+}
+
+function acceptProject(id) {
+  setReview(id, 'accepted');
   renderProjects();
-  updateStats();
-  showToast('All dismissed projects restored.');
+  updateTabCounts();
+  showToast('Project accepted.');
+}
+function declineProject(id) {
+  setReview(id, 'declined');
+  renderProjects();
+  updateTabCounts();
+  showToast('Project declined.');
+}
+function moveToNew(id) {
+  const reviews = getReviews();
+  delete reviews[id];
+  localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
+  renderProjects();
+  updateTabCounts();
+  showToast('Project moved back to New.');
 }
 
 // ---- Init ----
@@ -108,9 +121,18 @@ function setupEventListeners() {
   document.getElementById('btnSaveGH').addEventListener('click', onSaveGHConfig);
   document.getElementById('btnDisconnectGH').addEventListener('click', onDisconnectGH);
 
-  // Allow Enter key in add-source inputs
   document.getElementById('newSourceUrl').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') addSource();
+  });
+
+  // Tab switching
+  document.querySelectorAll('.project-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      activeTab = tab.dataset.tab;
+      document.querySelectorAll('.project-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      renderProjects();
+    });
   });
 
   // Close modals on overlay click
@@ -120,7 +142,6 @@ function setupEventListeners() {
     });
   });
 
-  // Keyboard close
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
       document.querySelectorAll('.modal-overlay.active').forEach(el => toggleModal(el.id, false));
@@ -149,16 +170,8 @@ function onSaveGHConfig() {
   const token  = document.getElementById('ghToken').value.trim();
   const repo   = document.getElementById('ghRepo').value.trim();
   const branch = document.getElementById('ghBranch').value.trim() || 'main';
-
-  if (!token || !repo) {
-    showToast('Please enter both a token and repository.', 'error');
-    return;
-  }
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
-    showToast('Repository must be in format owner/repo.', 'error');
-    return;
-  }
-
+  if (!token || !repo) { showToast('Please enter both a token and repository.', 'error'); return; }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { showToast('Repository must be in format owner/repo.', 'error'); return; }
   saveGHConfig(token, repo, branch);
   renderGHConfig();
   showToast('GitHub connected.', 'success');
@@ -177,14 +190,11 @@ async function loadProjects() {
     if (!res.ok) throw new Error('No data yet');
     const data = await res.json();
     allProjects = data.projects || [];
-    dataMetadata = {
-      by_category: data.by_category || {},
-      by_country:  data.by_country  || {},
-    };
     if (data.last_updated) {
       document.getElementById('lastUpdated').textContent = `Last scan: ${formatDate(data.last_updated)}`;
     }
     updateStats();
+    updateTabCounts();
     populateFilters();
     renderProjects();
   } catch {
@@ -207,17 +217,27 @@ async function loadSources() {
 
 // ---- Stats ----
 function updateStats() {
-  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const dismissed = getDismissedIds();
+  const reviews = getReviews();
+  const accepted = allProjects.filter(p => reviews[p.id] === 'accepted');
 
-  document.getElementById('statTotal').textContent =
-    allProjects.filter(p => !dismissed.includes(p.id)).length;
+  document.getElementById('statTotal').textContent = accepted.length;
   document.getElementById('statNew').textContent =
-    allProjects.filter(p => p.first_seen && new Date(p.first_seen) > weekAgo).length;
+    allProjects.filter(p => !reviews[p.id]).length;
   document.getElementById('statSources').textContent = allSources.length;
 
-  const countries = [...new Set(allProjects.map(p => p.country).filter(Boolean))];
+  const countries = [...new Set(accepted.map(p => p.country).filter(Boolean))];
   document.getElementById('statCountries').textContent = countries.length;
+}
+
+function updateTabCounts() {
+  const reviews = getReviews();
+  const newCount      = allProjects.filter(p => !reviews[p.id]).length;
+  const acceptedCount = allProjects.filter(p => reviews[p.id] === 'accepted').length;
+  const declinedCount = allProjects.filter(p => reviews[p.id] === 'declined').length;
+
+  document.getElementById('tabNew').textContent      = `New${newCount      ? ` (${newCount})`      : ''}`;
+  document.getElementById('tabAccepted').textContent  = `Accepted${acceptedCount ? ` (${acceptedCount})` : ''}`;
+  document.getElementById('tabDeclined').textContent  = `Declined${declinedCount ? ` (${declinedCount})` : ''}`;
 }
 
 // ---- Filters ----
@@ -226,10 +246,9 @@ function populateFilters() {
   const countries = [...new Set(allProjects.map(p => p.country).filter(Boolean))].sort();
   countrySel.innerHTML = '<option value="all">All Countries</option>';
   countries.forEach(c => {
-    const count = allProjects.filter(p => p.country === c).length;
     const opt = document.createElement('option');
     opt.value = c;
-    opt.textContent = `${c} (${count})`;
+    opt.textContent = c;
     countrySel.appendChild(opt);
   });
 
@@ -249,10 +268,13 @@ function getFilteredProjects() {
   const country    = document.getElementById('filterCountry').value;
   const university = document.getElementById('filterUniversity').value;
   const category   = document.getElementById('filterCategory').value;
-  const dismissed  = getDismissedIds();
+  const reviews    = getReviews();
 
   return allProjects.filter(p => {
-    if (dismissed.includes(p.id)) return false;
+    // Tab filter
+    const status = reviews[p.id] || 'new';
+    if (status !== activeTab) return false;
+    // Search
     if (query) {
       const haystack = [
         p.title, p.description, p.source_org, p.contact_name, p.contact_email, p.country,
@@ -272,48 +294,77 @@ function renderProjects() {
   const container = document.getElementById('projectsContainer');
   const filtered  = getFilteredProjects();
 
+  const emptyMessages = {
+    new:      { title: 'No new projects', sub: 'All projects have been reviewed. New ones will appear after the next scrape.' },
+    accepted: { title: 'No accepted projects', sub: 'Accept projects from the New tab to see them here.' },
+    declined: { title: 'No declined projects', sub: 'Declined projects will appear here.' },
+  };
+
   if (filtered.length === 0) {
+    const msg = allProjects.length === 0
+      ? { title: 'No projects yet', sub: 'Add source URLs and run Scrape Now to get started.' }
+      : emptyMessages[activeTab];
     container.innerHTML = `
       <div class="empty-state">
         <img src="assets/berry_icon.png" alt="" class="empty-icon">
-        <h3>${allProjects.length === 0 ? 'No projects yet' : 'No matching projects'}</h3>
-        <p>${allProjects.length === 0
-          ? 'The scraper has not run yet. Only active, thesis-qualifying projects will appear here after the next Monday scan.'
-          : 'Try adjusting your search or filters.'}</p>
+        <h3>${msg.title}</h3>
+        <p>${msg.sub}</p>
       </div>`;
     return;
   }
 
+  // Sort: newest first for New tab, score-first for Accepted
   const sorted = [...filtered].sort((a, b) => {
+    if (activeTab === 'new') {
+      return (b.first_seen || '').localeCompare(a.first_seen || '');
+    }
     const scoreA = a.relevance_score || 0;
     const scoreB = b.relevance_score || 0;
     if (scoreA !== scoreB) return scoreB - scoreA;
     return (b.first_seen || '').localeCompare(a.first_seen || '');
   });
 
+  const isDeclined = activeTab === 'declined';
+
   container.innerHTML = sorted.map((p, i) => {
-    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const isNew   = p.first_seen && new Date(p.first_seen) > weekAgo;
-    const score   = p.relevance_score || 0;
+    const score = p.relevance_score || 0;
+    const cardClass = isDeclined ? 'project-card declined' : 'project-card';
+
+    let actions = '';
+    if (activeTab === 'new') {
+      actions = `
+        <div class="project-actions">
+          <button class="btn-accept" onclick="event.stopPropagation(); acceptProject('${esc(p.id)}')">ACCEPT</button>
+          <button class="btn-decline" onclick="event.stopPropagation(); declineProject('${esc(p.id)}')">DECLINE</button>
+        </div>`;
+    } else if (activeTab === 'declined') {
+      actions = `
+        <div class="project-actions">
+          <button class="btn-undo" onclick="event.stopPropagation(); moveToNew('${esc(p.id)}')">UNDO</button>
+        </div>`;
+    } else if (activeTab === 'accepted') {
+      actions = `
+        <div class="project-actions">
+          <button class="btn-decline" onclick="event.stopPropagation(); declineProject('${esc(p.id)}')">REMOVE</button>
+        </div>`;
+    }
 
     return `
-    <div class="project-card flagged" data-index="${i}">
-      <button class="btn-dismiss" title="Dismiss this project" onclick="event.stopPropagation(); dismissProject('${esc(p.id)}')">&times;</button>
+    <div class="${cardClass}" data-index="${i}">
+      ${actions}
       <div class="project-inner" onclick="showDetail(${i})">
         <div class="project-relevance relevant" title="Relevance score: ${score}">${score}</div>
         <div class="project-body">
           <div class="project-header">
             <span class="project-title">${esc(p.title || 'Untitled Project')}</span>
-            ${isNew ? '<span class="project-badge badge-new">NEW</span>' : ''}
             ${(p.categories || []).map(c => `<span class="project-badge badge-category">${esc(categoryLabel(c))}</span>`).join('')}
           </div>
           <div class="project-desc">${esc(p.description || 'No description available.')}</div>
           <div class="project-meta">
             <span>&#127891; ${esc(p.source_org || 'Unknown')}</span>
-            <span>&#127758; ${esc(p.country || '—')}</span>
+            ${p.country ? `<span>&#127758; ${esc(p.country)}</span>` : ''}
             ${p.contact_name  ? `<span>&#128100; ${esc(p.contact_name)}</span>`  : ''}
-            ${p.contact_email ? `<span>&#9993; ${esc(p.contact_email)}</span>`   : ''}
-            ${p.first_seen    ? `<span>&#128197; ${formatDate(p.first_seen)}</span>` : ''}
+            ${p.start_date || p.end_date ? `<span>&#128197; ${esc(p.start_date || '?')} — ${esc(p.end_date || '?')}</span>` : ''}
           </div>
         </div>
       </div>
@@ -321,13 +372,6 @@ function renderProjects() {
   }).join('');
 
   container._sortedData = sorted;
-
-  const dismissedCount = getDismissedIds().length;
-  const restoreBtn = document.getElementById('btnRestore');
-  if (restoreBtn) {
-    restoreBtn.style.display = dismissedCount > 0 ? '' : 'none';
-    restoreBtn.textContent = `Restore dismissed (${dismissedCount})`;
-  }
 }
 
 function showDetail(index) {
@@ -351,9 +395,14 @@ function showDetail(index) {
         ${(p.matched_keywords || []).map(k => `<span class="detail-tag">${esc(k)}</span>`).join('')}
       </div>
     </div>
+    ${p.start_date || p.end_date ? `
+    <div class="detail-section">
+      <h3>Period</h3>
+      <p>${esc(p.start_date || '?')} — ${esc(p.end_date || '?')}</p>
+    </div>` : ''}
     <div class="detail-section">
       <h3>Source</h3>
-      <p>${esc(p.source_org || 'Unknown')} &mdash; ${esc(p.country || '—')}</p>
+      <p>${esc(p.source_org || 'Unknown')}${p.country ? ` — ${esc(p.country)}` : ''}</p>
     </div>
     ${p.contact_name || p.contact_email ? `
     <div class="detail-section">
@@ -421,29 +470,15 @@ function renderSources() {
   }).join('');
 }
 
-function startEditSource(index) {
-  editingSourceIndex = index;
-  renderSources();
-}
-
-function cancelSourceEdit() {
-  editingSourceIndex = -1;
-  renderSources();
-}
+function startEditSource(index) { editingSourceIndex = index; renderSources(); }
+function cancelSourceEdit() { editingSourceIndex = -1; renderSources(); }
 
 async function saveSourceEdit(index) {
   const name    = document.getElementById(`editName_${index}`).value.trim();
   const url     = document.getElementById(`editUrl_${index}`).value.trim();
   const country = document.getElementById(`editCountry_${index}`).value.trim();
-
-  if (!name || !url) {
-    showToast('Label and URL are required.', 'error');
-    return;
-  }
-  try { new URL(url); } catch {
-    showToast('Please enter a valid URL.', 'error');
-    return;
-  }
+  if (!name || !url) { showToast('Label and URL are required.', 'error'); return; }
+  try { new URL(url); } catch { showToast('Please enter a valid URL.', 'error'); return; }
 
   const updated = [...allSources];
   updated[index] = { name, url };
@@ -451,12 +486,7 @@ async function saveSourceEdit(index) {
 
   try {
     const file = await ghReadFile('sources.json');
-    await ghWriteFile(
-      'sources.json',
-      JSON.stringify(updated, null, 2),
-      `Edit source: ${name}`,
-      file.sha
-    );
+    await ghWriteFile('sources.json', JSON.stringify(updated, null, 2), `Edit source: ${name}`, file.sha);
     allSources = updated;
     editingSourceIndex = -1;
     renderSources();
@@ -470,19 +500,9 @@ async function addSource() {
   const name    = document.getElementById('newSourceName').value.trim();
   const url     = document.getElementById('newSourceUrl').value.trim();
   const country = document.getElementById('newSourceCountry').value.trim();
-
-  if (!name || !url) {
-    showToast('Please enter both a label and URL.', 'error');
-    return;
-  }
-  try { new URL(url); } catch {
-    showToast('Please enter a valid URL.', 'error');
-    return;
-  }
-  if (allSources.some(s => s.url === url)) {
-    showToast('This URL is already in the list.', 'error');
-    return;
-  }
+  if (!name || !url) { showToast('Please enter both a label and URL.', 'error'); return; }
+  try { new URL(url); } catch { showToast('Please enter a valid URL.', 'error'); return; }
+  if (allSources.some(s => s.url === url)) { showToast('This URL is already in the list.', 'error'); return; }
 
   const newSource = { name, url };
   if (country) newSource.country = country;
@@ -490,19 +510,13 @@ async function addSource() {
 
   try {
     const file = await ghReadFile('sources.json');
-    await ghWriteFile(
-      'sources.json',
-      JSON.stringify(updated, null, 2),
-      `Add source: ${name}`,
-      file.sha
-    );
+    await ghWriteFile('sources.json', JSON.stringify(updated, null, 2), `Add source: ${name}`, file.sha);
     allSources = updated;
     showToast(`Added "${name}" — will be scraped on the next Monday scan.`, 'success');
   } catch (err) {
     showToast(`Could not save to GitHub: ${err.message}`, 'error');
     return;
   }
-
   renderSources();
   document.getElementById('newSourceName').value    = '';
   document.getElementById('newSourceUrl').value     = '';
@@ -512,17 +526,10 @@ async function addSource() {
 async function removeSource(index) {
   const source = allSources[index];
   if (!confirm(`Remove "${source.name}" from monitored URLs?`)) return;
-
   const updated = allSources.filter((_, i) => i !== index);
-
   try {
     const file = await ghReadFile('sources.json');
-    await ghWriteFile(
-      'sources.json',
-      JSON.stringify(updated, null, 2),
-      `Remove source: ${source.name}`,
-      file.sha
-    );
+    await ghWriteFile('sources.json', JSON.stringify(updated, null, 2), `Remove source: ${source.name}`, file.sha);
     allSources = updated;
     renderSources();
     showToast('URL removed.', 'success');
@@ -622,15 +629,8 @@ function renderKeywords() {
 async function saveKeywords() {
   try {
     const file = await ghReadFile('keywords.json');
-    await ghWriteFile(
-      'keywords.json',
-      JSON.stringify(allKeywords, null, 2),
-      'Update thesis keywords via Radar UI',
-      file.sha
-    );
-  } catch {
-    // Silently fail — keywords still updated in memory for display
-  }
+    await ghWriteFile('keywords.json', JSON.stringify(allKeywords, null, 2), 'Update thesis keywords via Radar UI', file.sha);
+  } catch { }
 }
 
 function addKeyword(cat) {
@@ -639,10 +639,7 @@ function addKeyword(cat) {
   const kw = input.value.trim().toLowerCase();
   if (!kw) return;
   if (!allKeywords[cat]) allKeywords[cat] = [];
-  if (allKeywords[cat].includes(kw)) {
-    showToast('Keyword already exists in this category.', 'error');
-    return;
-  }
+  if (allKeywords[cat].includes(kw)) { showToast('Keyword already exists.', 'error'); return; }
   allKeywords[cat].push(kw);
   input.value = '';
   renderKeywords();
@@ -662,15 +659,12 @@ function addKeywordCategory() {
   const input = document.getElementById('newCategoryName');
   const name  = input.value.trim().toLowerCase().replace(/\s+/g, '_');
   if (!name) return;
-  if (allKeywords[name]) {
-    showToast('Category already exists.', 'error');
-    return;
-  }
+  if (allKeywords[name]) { showToast('Category already exists.', 'error'); return; }
   allKeywords[name] = [];
   input.value = '';
   renderKeywords();
   saveKeywords();
-  showToast(`Category "${name.replace(/_/g, ' ')}" created. Add keywords to it!`);
+  showToast(`Category "${name.replace(/_/g, ' ')}" created.`);
 }
 
 function removeKeywordCategory(cat) {
@@ -684,10 +678,7 @@ function removeKeywordCategory(cat) {
 // ---- Scrape Now ----
 async function triggerScrape() {
   const cfg = getGHConfig();
-  if (!cfg) {
-    showToast('Connect GitHub first (open Sources).', 'error');
-    return;
-  }
+  if (!cfg) { showToast('Connect GitHub first (open Sources).', 'error'); return; }
 
   const btn = document.getElementById('btnScrapeNow');
   btn.disabled = true;
@@ -706,10 +697,7 @@ async function triggerScrape() {
         body: JSON.stringify({ ref: cfg.branch }),
       }
     );
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`${res.status} ${errText}`);
-    }
+    if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
     showToast('Scrape triggered! Takes a few minutes. Refresh the page afterwards.');
   } catch (err) {
     showToast('Could not trigger scrape: ' + err.message, 'error');

@@ -257,6 +257,33 @@ select:focus { outline: none; border-color: var(--jade); }
   gap: 12px;
 }
 
+/* PROJECT TABS */
+.project-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 32px;
+  background: var(--white);
+  border-bottom: 2px solid var(--border);
+}
+.project-tab {
+  padding: 12px 24px;
+  border: none;
+  background: none;
+  font-size: 14px;
+  font-weight: bold;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+}
+.project-tab.active {
+  color: var(--space-blue);
+  border-bottom-color: var(--jade);
+}
+.project-tab:hover { color: var(--space-blue); }
+
+/* PROJECT CARDS */
 .project-card {
   background: var(--white);
   border: 1px solid var(--border);
@@ -265,36 +292,68 @@ select:focus { outline: none; border-color: var(--jade); }
   transition: all 0.2s;
   position: relative;
   box-shadow: var(--shadow);
+  border-left: 4px solid var(--cb-yellow);
 }
+.project-card.declined {
+  opacity: 0.5;
+  border-left-color: var(--border);
+}
+.project-card.declined:hover { opacity: 0.75; }
 .project-inner {
   display: flex;
   gap: 16px;
   align-items: flex-start;
   cursor: pointer;
 }
-.btn-dismiss {
+.project-actions {
   position: absolute;
-  top: 8px;
-  right: 10px;
+  top: 12px;
+  right: 14px;
+  display: flex;
+  gap: 8px;
+  z-index: 1;
+}
+.btn-accept {
+  background: none;
+  border: none;
+  color: var(--jade);
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  transition: background 0.15s;
+}
+.btn-accept:hover { background: rgba(0, 122, 110, 0.1); }
+.btn-decline {
+  background: none;
+  border: none;
+  color: #c0392b;
+  font-size: 13px;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 4px 10px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  transition: background 0.15s;
+}
+.btn-decline:hover { background: rgba(192, 57, 43, 0.08); }
+.btn-undo {
   background: none;
   border: none;
   color: var(--muted);
-  font-size: 20px;
+  font-size: 12px;
+  font-weight: bold;
   cursor: pointer;
-  line-height: 1;
-  padding: 2px 6px;
+  padding: 4px 10px;
   border-radius: 4px;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s, background 0.15s;
+  transition: background 0.15s;
 }
-.project-card:hover .btn-dismiss { opacity: 1; }
-.btn-dismiss:hover { color: #c0392b; background: rgba(192,57,43,0.08); }
+.btn-undo:hover { background: var(--light-gray); color: var(--space-blue); }
 .project-card:hover {
   box-shadow: var(--shadow-hover);
   border-color: var(--jade);
-}
-.project-card.flagged {
-  border-left: 4px solid var(--cb-yellow);
 }
 
 .project-relevance {

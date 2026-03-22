@@ -26,11 +26,11 @@
   <section class="stats-bar">
     <div class="stat-card stat-flagged">
       <div class="stat-number" id="statTotal">0</div>
-      <div class="stat-label">Active Qualifying Projects</div>
+      <div class="stat-label">Accepted Projects</div>
     </div>
     <div class="stat-card">
       <div class="stat-number" id="statNew">0</div>
-      <div class="stat-label">New This Week</div>
+      <div class="stat-label">Awaiting Review</div>
     </div>
     <div class="stat-card">
       <div class="stat-number" id="statCountries">0</div>
@@ -74,20 +74,18 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Scrape Now
       </button>
-      <button class="btn btn-ghost" id="btnRestore" style="display:none;" onclick="undismissAll()" title="Restore dismissed projects">
-        Restore dismissed
-      </button>
     </div>
   </section>
 
-  <!-- PROJECTS LIST -->
-  <section class="projects-container" id="projectsContainer">
-    <div class="empty-state" id="emptyState">
-      <img src="assets/berry_icon.png" alt="" class="empty-icon">
-      <h3>No projects yet</h3>
-      <p>The scraper has not run yet, or no projects matched your filters. Projects will appear here after the next Monday scan.</p>
-    </div>
+  <!-- PROJECT TABS -->
+  <section class="project-tabs">
+    <button class="project-tab active" data-tab="new" id="tabNew">New</button>
+    <button class="project-tab" data-tab="accepted" id="tabAccepted">Accepted</button>
+    <button class="project-tab" data-tab="declined" id="tabDeclined">Declined</button>
   </section>
+
+  <!-- PROJECTS LIST -->
+  <section class="projects-container" id="projectsContainer"></section>
 
   <!-- SOURCES MODAL -->
   <div class="modal-overlay" id="sourcesModal">
