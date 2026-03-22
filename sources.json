@@ -3,5 +3,10 @@
     "name": "Tampere University",
     "url": "https://www.tuni.fi/en/search?organisation=&search_type=research&content_type=research_project&keyword=R2B&sortby=title_asc&view_mode=grid&project_status=1",
     "country": "Finland"
+  },
+  {
+    "name": "VTT Launchpad",
+    "url": "https://www.vttresearch.com/en/vtt-launchpad",
+    "country": "Finland"
   }
 ]
