@@ -1,5 +1,5 @@
 {
-  "last_updated": "2026-03-22T14:06:43.588658+00:00",
+  "last_updated": "2026-03-22T14:14:45.416443+00:00",
   "total": 2,
   "by_category": {
     "semiconductors": 1,
@@ -30,13 +30,13 @@
       "matched_keywords": [
         "all-optical",
         "optical",
-        "timekeeping",
         "enz",
-        "femtosecond"
+        "femtosecond",
+        "timekeeping"
       ],
       "relevance_score": 5,
       "first_seen": "2026-03-22T14:06:43.588658+00:00",
-      "last_seen": "2026-03-22T14:06:43.588658+00:00"
+      "last_seen": "2026-03-22T14:14:45.416443+00:00"
     },
     {
       "id": "588273eb2c71",
@@ -55,12 +55,12 @@
         "equipment"
       ],
       "matched_keywords": [
-        "power electronics",
-        "equipment"
+        "equipment",
+        "power electronics"
       ],
       "relevance_score": 2,
       "first_seen": "2026-03-22T14:06:43.588658+00:00",
-      "last_seen": "2026-03-22T14:06:43.588658+00:00"
+      "last_seen": "2026-03-22T14:14:45.416443+00:00"
     }
   ]
 }
