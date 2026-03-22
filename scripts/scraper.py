@@ -361,13 +361,27 @@ def clean_projects(projects):
                     p['description'] = rest[:500] if len(rest) > 20 else ''
                     break
 
-        # ── Skip generic service/index pages ──
+        # ── Skip generic service/index/nav pages ──
         url_lower = url.lower()
         GENERIC_URL_PATTERNS = [
             '/ourservices', '/industries', '/all-services',
             '/service/', '/tjanster/', '/palvelut/',
+            '/about-us/', '/about/', '/contact', '/careers',
+            '/news-and-ideas/', '/news/', '/blog/', '/press',
+            '/media/', '/for-media', '/for-investors',
+            '/subscribe', '/newsletter',
         ]
         if any(pat in url_lower for pat in GENERIC_URL_PATTERNS):
+            continue
+
+        # ── Skip generic nav-style titles ──
+        GENERIC_TITLES = [
+            'industries', 'all services', 'customer stories',
+            'knowledge base', 'for media', 'for investors',
+            'r&d infrastructure', 'contact us', 'about us',
+            'news', 'blog', 'press', 'careers', 'events',
+        ]
+        if title.lower().strip() in GENERIC_TITLES:
             continue
 
         # ── Fix bad contact names (timestamps, button labels, etc.) ──
