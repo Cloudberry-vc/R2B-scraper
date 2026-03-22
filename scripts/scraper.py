@@ -358,30 +358,58 @@ def fetch_detail_page(url):
 
     # ── Email ──
     email = ''
+    # Standard mailto links
     for mailto in soup.select('a[href^="mailto:"]'):
         addr = mailto.get('href', '').replace('mailto:', '').split('?')[0].strip()
+        # Strip any HTML tags that leaked into the href
+        addr = re.sub(r'<[^>]+>', '', addr).strip()
         if '@' in addr:
             email = addr
             break
+    # Spam-protected emails: "user[at]domain.fi" or "user [at] domain [dot] fi"
+    if not email:
+        spam_re = re.compile(
+            r'([\w.+-]+)\s*\[at\]\s*([\w.-]+(?:\[dot\][\w.-]+)+|[\w.-]+\.\w{2,})',
+            re.IGNORECASE
+        )
+        page_text = full_text[:5000]
+        m = spam_re.search(page_text)
+        if m:
+            local = m.group(1)
+            domain = m.group(2).replace('[dot]', '.').replace(' ', '')
+            email = f'{local}@{domain}'
 
     # ── Contact name ──
     name = ''
+    # Try specific selectors
     for sel in ['.person-name', '.contact-name', '.author', '.researcher-name',
                 '.pi-name', '.field-name-field-contact', '.responsible-person',
-                '[class*="person-name"]', '[class*="contact"]',
-                '[class*="author"]', '[class*="researcher"]']:
+                '[class*="person-name"]', '[class*="contact-name"]',
+                '[class*="author"]', '[class*="researcher"]',
+                '[class*="responsible"]', '[class*="leader"]',
+                '[class*="member"] a']:
         el = soup.select_one(sel)
         if el:
             txt = el.get_text(strip=True)
             if txt and 3 < len(txt) < 80:
                 name = txt
                 break
+    # Try to find name near email link
     if not name and email:
         for mailto in soup.select('a[href^="mailto:"]'):
             txt = mailto.get_text(strip=True)
-            if txt and '@' not in txt and 3 < len(txt) < 80:
+            if txt and '@' not in txt and '[at]' not in txt and 3 < len(txt) < 80:
                 name = txt
                 break
+    # Try to find name from text patterns like "Contact: Name" or "Responsible: Name"
+    if not name:
+        contact_re = re.compile(
+            r'(?:contact|responsible|leader|principal investigator|PI|coordinator)\s*[:]\s*'
+            r'([A-ZÄÖÜÅÆØ][a-zäöüåæø]+(?:\s+[A-ZÄÖÜÅÆØ][a-zäöüåæø]+){1,3})',
+        )
+        m = contact_re.search(full_text)
+        if m:
+            name = m.group(1).strip()
 
     # ── Start / end dates ──
     start_date = ''

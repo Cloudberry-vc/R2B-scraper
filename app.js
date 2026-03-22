@@ -79,12 +79,14 @@ function acceptProject(id) {
   setReview(id, 'accepted');
   renderProjects();
   updateTabCounts();
+  updateStats();
   showToast('Project accepted.');
 }
 function declineProject(id) {
   setReview(id, 'declined');
   renderProjects();
   updateTabCounts();
+  updateStats();
   showToast('Project declined.');
 }
 function moveToNew(id) {
@@ -93,7 +95,31 @@ function moveToNew(id) {
   localStorage.setItem(REVIEW_KEY, JSON.stringify(reviews));
   renderProjects();
   updateTabCounts();
+  updateStats();
   showToast('Project moved back to New.');
+}
+
+// ---- Source Resolution ----
+// Match projects to sources by hostname so edits to source name/country
+// are reflected immediately without re-scraping.
+function resolveSource(project) {
+  try {
+    const projectHost = new URL(project.url).hostname;
+    const match = allSources.find(s => {
+      try { return new URL(s.url).hostname === projectHost; }
+      catch { return false; }
+    });
+    if (match) {
+      return {
+        name: match.name,
+        country: match.country || project.country || '',
+      };
+    }
+  } catch {}
+  return {
+    name: project.source_org || project.source_name || 'Unknown',
+    country: project.country || '',
+  };
 }
 
 // ---- Init ----
@@ -253,12 +279,11 @@ function populateFilters() {
   });
 
   const uniSel = document.getElementById('filterUniversity');
-  const orgs = [...new Set(allProjects.map(p => p.source_org).filter(Boolean))].sort();
   uniSel.innerHTML = '<option value="all">All Sources</option>';
-  orgs.forEach(org => {
+  allSources.forEach(s => {
     const opt = document.createElement('option');
-    opt.value = org;
-    opt.textContent = org;
+    opt.value = s.name;
+    opt.textContent = s.name;
     uniSel.appendChild(opt);
   });
 }
@@ -282,8 +307,9 @@ function getFilteredProjects() {
       ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(query)) return false;
     }
-    if (country    !== 'all' && p.country    !== country)    return false;
-    if (university !== 'all' && p.source_org !== university) return false;
+    const src = resolveSource(p);
+    if (country    !== 'all' && src.country  !== country)    return false;
+    if (university !== 'all' && src.name     !== university) return false;
     if (category   !== 'all' && !(p.categories || []).includes(category)) return false;
     return true;
   });
@@ -329,6 +355,7 @@ function renderProjects() {
   container.innerHTML = sorted.map((p, i) => {
     const score = p.relevance_score || 0;
     const cardClass = isDeclined ? 'project-card declined' : 'project-card';
+    const src = resolveSource(p);
 
     let actions = '';
     if (activeTab === 'new') {
@@ -361,9 +388,10 @@ function renderProjects() {
           </div>
           <div class="project-desc">${esc(p.description || 'No description available.')}</div>
           <div class="project-meta">
-            <span>&#127891; ${esc(p.source_org || 'Unknown')}</span>
-            ${p.country ? `<span>&#127758; ${esc(p.country)}</span>` : ''}
+            <span>&#127891; ${esc(src.name)}</span>
+            ${src.country ? `<span>&#127758; ${esc(src.country)}</span>` : ''}
             ${p.contact_name  ? `<span>&#128100; ${esc(p.contact_name)}</span>`  : ''}
+            ${p.contact_email ? `<span>&#9993; ${esc(p.contact_email)}</span>`   : ''}
             ${p.start_date || p.end_date ? `<span>&#128197; ${esc(p.start_date || '?')} — ${esc(p.end_date || '?')}</span>` : ''}
           </div>
         </div>
@@ -380,6 +408,7 @@ function showDetail(index) {
   const p = sorted[index];
   if (!p) return;
 
+  const src = resolveSource(p);
   document.getElementById('detailTitle').textContent = p.title || 'Untitled Project';
   document.getElementById('detailBody').innerHTML = `
     <div class="detail-section">
@@ -402,7 +431,7 @@ function showDetail(index) {
     </div>` : ''}
     <div class="detail-section">
       <h3>Source</h3>
-      <p>${esc(p.source_org || 'Unknown')}${p.country ? ` — ${esc(p.country)}` : ''}</p>
+      <p>${esc(src.name)}${src.country ? ` — ${esc(src.country)}` : ''}</p>
     </div>
     ${p.contact_name || p.contact_email ? `
     <div class="detail-section">
@@ -420,7 +449,7 @@ function showDetail(index) {
       </a>
     </div>` : ''}
     <div class="detail-section" style="font-size:11px;color:var(--muted);">
-      First seen: ${formatDate(p.first_seen)} | Last seen: ${formatDate(p.last_seen)} | Source: ${esc(p.source_name || '')}
+      First seen: ${formatDate(p.first_seen)} | Last seen: ${formatDate(p.last_seen)} | Source: ${esc(src.name)}
     </div>
   `;
   toggleModal('detailModal', true);
