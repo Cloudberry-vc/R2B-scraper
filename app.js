@@ -378,6 +378,8 @@ function showDetail(index) {
 }
 
 // ---- Sources ----
+let editingSourceIndex = -1;
+
 function renderSources() {
   const list = document.getElementById('sourcesList');
   document.getElementById('sourceCount').textContent = `(${allSources.length})`;
@@ -388,20 +390,86 @@ function renderSources() {
     return;
   }
 
-  list.innerHTML = allSources.map((s, i) => `
+  list.innerHTML = allSources.map((s, i) => {
+    if (i === editingSourceIndex) {
+      return `
+      <div class="source-item source-editing">
+        <div class="source-edit-form">
+          <div class="form-row">
+            <input type="text" id="editName_${i}" value="${esc(s.name)}" placeholder="Label">
+            <input type="url" id="editUrl_${i}" value="${esc(s.url)}" placeholder="URL">
+            <input type="text" id="editCountry_${i}" value="${esc(s.country || '')}" placeholder="Country" style="max-width:140px;">
+          </div>
+          <div class="source-edit-actions">
+            <button class="btn btn-primary btn-sm" onclick="saveSourceEdit(${i})">Save</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelSourceEdit()">Cancel</button>
+          </div>
+        </div>
+      </div>`;
+    }
+    return `
     <div class="source-item">
       <div class="source-info">
-        <div class="source-name">${esc(s.name)}</div>
+        <div class="source-name">${esc(s.name)}${s.country ? ` <span style="color:var(--muted);font-weight:normal;">— ${esc(s.country)}</span>` : ''}</div>
         <div class="source-url" title="${esc(s.url)}">${esc(s.url)}</div>
       </div>
-      <button class="btn btn-danger btn-sm" onclick="removeSource(${i})">Remove</button>
-    </div>
-  `).join('');
+      <div class="source-actions">
+        <button class="btn btn-secondary btn-sm" onclick="startEditSource(${i})">Edit</button>
+        <button class="btn btn-danger btn-sm" onclick="removeSource(${i})">Remove</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function startEditSource(index) {
+  editingSourceIndex = index;
+  renderSources();
+}
+
+function cancelSourceEdit() {
+  editingSourceIndex = -1;
+  renderSources();
+}
+
+async function saveSourceEdit(index) {
+  const name    = document.getElementById(`editName_${index}`).value.trim();
+  const url     = document.getElementById(`editUrl_${index}`).value.trim();
+  const country = document.getElementById(`editCountry_${index}`).value.trim();
+
+  if (!name || !url) {
+    showToast('Label and URL are required.', 'error');
+    return;
+  }
+  try { new URL(url); } catch {
+    showToast('Please enter a valid URL.', 'error');
+    return;
+  }
+
+  const updated = [...allSources];
+  updated[index] = { name, url };
+  if (country) updated[index].country = country;
+
+  try {
+    const file = await ghReadFile('sources.json');
+    await ghWriteFile(
+      'sources.json',
+      JSON.stringify(updated, null, 2),
+      `Edit source: ${name}`,
+      file.sha
+    );
+    allSources = updated;
+    editingSourceIndex = -1;
+    renderSources();
+    showToast('Source updated.', 'success');
+  } catch (err) {
+    showToast(`Could not save to GitHub: ${err.message}`, 'error');
+  }
 }
 
 async function addSource() {
-  const name = document.getElementById('newSourceName').value.trim();
-  const url  = document.getElementById('newSourceUrl').value.trim();
+  const name    = document.getElementById('newSourceName').value.trim();
+  const url     = document.getElementById('newSourceUrl').value.trim();
+  const country = document.getElementById('newSourceCountry').value.trim();
 
   if (!name || !url) {
     showToast('Please enter both a label and URL.', 'error');
@@ -417,7 +485,8 @@ async function addSource() {
   }
 
   const newSource = { name, url };
-  const updated   = [...allSources, newSource];
+  if (country) newSource.country = country;
+  const updated = [...allSources, newSource];
 
   try {
     const file = await ghReadFile('sources.json');
@@ -435,8 +504,9 @@ async function addSource() {
   }
 
   renderSources();
-  document.getElementById('newSourceName').value = '';
-  document.getElementById('newSourceUrl').value  = '';
+  document.getElementById('newSourceName').value    = '';
+  document.getElementById('newSourceUrl').value     = '';
+  document.getElementById('newSourceCountry').value = '';
 }
 
 async function removeSource(index) {

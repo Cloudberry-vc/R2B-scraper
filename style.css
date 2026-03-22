@@ -493,6 +493,24 @@ select:focus { outline: none; border-color: var(--jade); }
   line-height: 1.5;
 }
 
+/* SOURCE ACTIONS & EDIT MODE */
+.source-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.source-editing {
+  background: rgba(0, 122, 110, 0.04);
+  border: 1px solid rgba(0, 122, 110, 0.15);
+  border-radius: var(--radius-sm);
+}
+.source-edit-form { width: 100%; }
+.source-edit-form .form-row { margin-bottom: 8px; }
+.source-edit-actions {
+  display: flex;
+  gap: 6px;
+}
+
 /* GITHUB CONNECTED BAR */
 .gh-connected-bar {
   display: flex;
