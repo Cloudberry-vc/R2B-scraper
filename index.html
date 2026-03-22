@@ -60,16 +60,22 @@
         </select>
         <select id="filterCategory">
           <option value="all">All Categories</option>
-          <option value="semiconductors">Semiconductors</option>
-          <option value="photonics">Photonics &amp; Optics</option>
-          <option value="advanced_materials">Advanced Materials</option>
-          <option value="equipment">Equipment &amp; Metrology</option>
-          <option value="quantum">Quantum</option>
         </select>
       </div>
       <button class="btn btn-secondary" id="btnSources">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 5v14M5 12h14"/></svg>
-        Manage Sources
+        Sources
+      </button>
+      <button class="btn btn-secondary" id="btnKeywords">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M4 6h16M4 12h10M4 18h14"/></svg>
+        Keywords
+      </button>
+      <button class="btn btn-accent" id="btnScrapeNow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Scrape Now
+      </button>
+      <button class="btn btn-ghost" id="btnRestore" style="display:none;" onclick="undismissAll()" title="Restore dismissed projects">
+        Restore dismissed
       </button>
     </div>
   </section>
@@ -91,67 +97,59 @@
         <button class="modal-close" id="closeSourcesModal">&times;</button>
       </div>
       <div class="modal-body">
+
+        <!-- GitHub Connection -->
+        <div id="ghSetup" class="add-source-form">
+          <h3>GitHub Connection</h3>
+          <p class="bulk-hint">Required to save changes. Your token is stored only in this browser.</p>
+          <div class="form-row">
+            <input type="text" id="ghRepo" placeholder="owner/repo (e.g. cloudberry-vc/research-radar)">
+            <input type="password" id="ghToken" placeholder="GitHub Personal Access Token">
+            <input type="text" id="ghBranch" placeholder="Branch (default: main)" style="max-width:160px;">
+            <button class="btn btn-primary" id="btnSaveGH">Connect</button>
+          </div>
+        </div>
+        <div id="ghConnected" class="gh-connected-bar" style="display:none;">
+          <span>&#10003; Connected to <strong id="ghConnectedRepo"></strong></span>
+          <button class="btn btn-ghost btn-sm" id="btnDisconnectGH">Disconnect</button>
+        </div>
+
+        <hr class="modal-divider">
+
         <div class="add-source-form">
-          <h3>Add New Source</h3>
+          <h3>Add URL to Monitor</h3>
           <div class="form-row">
-            <input type="text" id="newSourceName" placeholder="Source name (e.g. Aalto Research Projects)">
-            <input type="url" id="newSourceUrl" placeholder="URL to monitor (e.g. https://research.aalto.fi/en/projects/)">
-          </div>
-          <div class="form-row">
-            <input type="text" id="newSourceOrg" placeholder="Organization (e.g. Aalto University)">
-            <select id="newSourceCountry">
-              <option value="Finland">Finland</option>
-              <option value="Sweden">Sweden</option>
-              <option value="Norway">Norway</option>
-              <option value="Denmark">Denmark</option>
-              <option value="Netherlands">Netherlands</option>
-              <option value="Germany">Germany</option>
-              <option value="Other">Other</option>
-            </select>
-            <select id="newSourceType">
-              <option value="university">University</option>
-              <option value="research_org">Research Org</option>
-              <option value="funding_body">Funding Body</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" id="btnAddSource">Add Source</button>
-        </div>
-
-        <hr class="modal-divider">
-
-        <div class="bulk-import-section">
-          <h3>Bulk Import</h3>
-          <div class="bulk-tabs">
-            <button class="bulk-tab active" data-tab="paste" id="tabPaste">Paste</button>
-            <button class="bulk-tab" data-tab="upload" id="tabUpload">Upload CSV / Excel</button>
-          </div>
-
-          <div class="bulk-panel" id="panelPaste">
-            <p class="bulk-hint">One source per line. Format: <code>name, url, organization, country, type</code><br>
-            Minimum: <code>name, url</code> (defaults: country=Finland, type=university, org=name)</p>
-            <textarea id="bulkPasteInput" rows="6" placeholder="Aalto Research Projects, https://research.aalto.fi/en/projects/, Aalto University, Finland, university
-TU Delft Projects, https://research.tudelft.nl/en/projects/, TU Delft, Netherlands, university"></textarea>
-            <button class="btn btn-primary" id="btnBulkPaste">Import Pasted Sources</button>
-          </div>
-
-          <div class="bulk-panel" id="panelUpload" style="display:none;">
-            <p class="bulk-hint">Upload a CSV or Excel file with columns: <code>name, url, organization, country, type</code><br>
-            First row should be headers. Only <code>name</code> and <code>url</code> are required.</p>
-            <div class="file-drop-zone" id="fileDropZone">
-              <input type="file" id="bulkFileInput" accept=".csv,.xlsx,.xls,.tsv" style="display:none;">
-              <p>Drop a file here or <a href="#" id="fileBrowseLink">browse</a></p>
-              <p class="bulk-hint">CSV, TSV, XLS, or XLSX</p>
-            </div>
-            <div id="bulkFilePreview" style="display:none;">
-              <p class="bulk-hint" id="bulkFileStatus"></p>
-              <button class="btn btn-primary" id="btnBulkUpload">Import From File</button>
-            </div>
+            <input type="text" id="newSourceName" placeholder="Label (e.g. Aalto Research Projects)">
+            <input type="url" id="newSourceUrl" placeholder="URL to scrape">
+            <button class="btn btn-primary" id="btnAddSource">Add</button>
           </div>
         </div>
 
         <hr class="modal-divider">
-        <h3>Current Sources <span class="source-count" id="sourceCount">(0)</span></h3>
+        <h3>Monitored URLs <span class="source-count" id="sourceCount">(0)</span></h3>
         <div class="sources-list" id="sourcesList"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KEYWORDS MODAL -->
+  <div class="modal-overlay" id="keywordsModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2>Thesis Keywords</h2>
+        <button class="modal-close" id="closeKeywordsModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="bulk-hint">These keywords determine which projects qualify for the Cloudberry thesis. Add or remove keywords per category. Changes are saved to the repo and take effect on the next scrape.</p>
+        <div id="keywordCategories"></div>
+        <hr class="modal-divider">
+        <div class="add-source-form">
+          <h3>Add New Category</h3>
+          <div class="form-row">
+            <input type="text" id="newCategoryName" placeholder="Category name (e.g. robotics)">
+            <button class="btn btn-primary" id="btnAddCategory">Add Category</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

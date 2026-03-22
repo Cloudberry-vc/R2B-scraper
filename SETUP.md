@@ -1,101 +1,92 @@
 # Cloudberry Research Radar — Setup Guide
 
-## What This Is
-
-A weekly research project scanner that monitors Finnish university research portals and flags projects relevant to the Cloudberry thesis (semiconductors, photonics, advanced materials, optics, equipment, quantum).
-
 ## Architecture
 
 ```
-GitHub Repo
-├── Frontend (HTML/CSS/JS) ──→ Deployed on Netlify
-├── sources.json ──→ List of URLs to monitor
-├── data/projects.json ──→ Scraped results (auto-updated)
-├── scripts/scraper.py ──→ Runs via GitHub Actions
-└── netlify/functions/ ──→ Handles source management from UI
+GitHub Repo (everything lives here)
+├── index.html / app.js / style.css  ──→ served via GitHub Pages
+├── sources.json                      ──→ list of URLs to monitor
+├── keywords.json                     ──→ thesis keyword categories
+├── data/projects.json                ──→ scraper output (auto-updated)
+└── scripts/scraper.py                ──→ runs via GitHub Actions
 ```
 
 - **Every Monday at 09:00 Helsinki time**, GitHub Actions runs the scraper
-- Scraper fetches each source URL, extracts projects, classifies relevance
-- Results are committed to `data/projects.json`
-- Netlify auto-deploys from the repo, so the site updates automatically
+- Scraper reads `sources.json`, fetches each URL, classifies projects
+- Results are committed back to `data/projects.json`
+- GitHub Pages auto-serves the site from `main` branch
 
-## Step-by-Step Setup
+---
 
-### 1. Create GitHub Repository
+## Step 1 — Create GitHub Repository
 
 ```bash
-cd cloudberry-radar
 git init
 git add .
-git commit -m "Initial commit: Cloudberry Research Radar"
+git commit -m "Initial commit"
 git branch -M main
 git remote add origin https://github.com/YOUR-ORG/research-radar.git
 git push -u origin main
 ```
 
-### 2. Deploy to Netlify
+## Step 2 — Enable GitHub Pages
 
-1. Go to [app.netlify.com](https://app.netlify.com)
-2. Click "Add new site" → "Import an existing project"
-3. Connect your GitHub account and select the `research-radar` repo
-4. Build settings should auto-detect from `netlify.toml`:
-   - Publish directory: `.`
-   - Functions directory: `netlify/functions`
-5. Click "Deploy"
+1. Go to your repo → **Settings → Pages**
+2. Source: **Deploy from a branch**
+3. Branch: `main` / `/ (root)`
+4. Click **Save**
 
-### 3. Configure Environment Variables (Netlify)
+Your site will be live at `https://YOUR-ORG.github.io/research-radar/`
 
-In Netlify → Site Settings → Environment Variables, add:
+## Step 3 — Create a GitHub Personal Access Token
 
-| Variable | Value | Description |
-|----------|-------|-------------|
-| `GITHUB_TOKEN` | `ghp_xxxxxxxxxxxx` | GitHub Personal Access Token with `repo` scope |
-| `GITHUB_REPO` | `your-org/research-radar` | Your repo in `owner/repo` format |
-| `GITHUB_BRANCH` | `main` | Branch name |
+1. GitHub → Settings → Developer settings → Personal access tokens → **Fine-grained tokens**
+2. Create a new token scoped to your repo with:
+   - **Contents: Read and Write** (to update sources.json / keywords.json)
+   - **Actions: Write** (to trigger the scrape workflow manually)
+3. Copy the token — you only see it once
 
-To create a GitHub token:
-1. Go to GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. Create a new token with **Contents: Read and Write** permission on the repo
+## Step 4 — Connect the UI to GitHub
 
-### 4. Enable GitHub Actions
+1. Open the live site
+2. Click **Sources** in the toolbar
+3. Fill in:
+   - **Repository**: `your-org/research-radar`
+   - **Token**: your PAT from Step 3
+   - **Branch**: `main`
+4. Click **Connect**
 
-The workflow runs automatically on the `schedule` trigger. To test it immediately:
-1. Go to your repo → Actions tab
-2. Select "Weekly Research Radar Scrape"
-3. Click "Run workflow" → "Run workflow"
+Your token is saved only in your browser's localStorage — it is never sent anywhere except directly to the GitHub API.
 
-### 5. Share with Colleagues
+## Step 5 — Add URLs to Monitor
 
-Share the Netlify URL (e.g. `https://research-radar.netlify.app`). Anyone with the link can:
-- Browse and search all scraped projects
-- Filter by relevance, university, category
-- Add new sources via the "Manage Sources" button
+With the site open, click **Sources** and add URLs one by one:
+- Enter a label (e.g. `Aalto Research Projects`)
+- Enter the URL to scrape (e.g. `https://research.aalto.fi/en/projects/`)
+- Click **Add**
 
-## Transferring to Cloudflare Pages
+Each addition writes directly to `sources.json` in your repo via GitHub API.
 
-When ready to move from Netlify to Cloudflare Pages:
+## Step 6 — Run Your First Scrape
 
-1. Go to Cloudflare dashboard → Pages → Create a project
-2. Connect your GitHub repo
-3. Set build output directory to `.` (root)
-4. For the Netlify Function, you'll need to port `manage-sources.js` to a Cloudflare Worker
-5. Set the same environment variables in Cloudflare Pages settings
+Click **Scrape Now** in the toolbar, or:
+1. Go to your repo → **Actions** → `Weekly Research Radar Scrape`
+2. Click **Run workflow**
 
-## Adding Sources
+The scraper runs, updates `data/projects.json`, commits it, and GitHub Pages serves the new data.
 
-**Via the UI:**
-Click "Manage Sources" in the toolbar, fill in the form, click "Add Source".
+---
 
-**Via the repo:**
-Edit `sources.json` directly and commit. The scraper will pick up the new source on the next run.
+## Customising Keywords
 
-## Customizing Keywords
-
-Edit the `KEYWORD_MAP` dictionary in `scripts/scraper.py` to add or modify thesis-relevant keywords.
+Click **Keywords** in the toolbar to add/remove thesis keywords per category.
+Changes are saved directly to `keywords.json` in the repo and take effect on the next scrape.
 
 ## Troubleshooting
 
-- **No projects showing up?** Run the GitHub Action manually first (Actions tab → Run workflow)
-- **Source management not saving?** Check that `GITHUB_TOKEN`, `GITHUB_REPO` are set in Netlify env vars
-- **Scraper timing?** The cron `0 7 * * 1` = Monday 07:00 UTC = 09:00 Helsinki time
+| Symptom | Fix |
+|---------|-----|
+| "GitHub not configured" | Open Sources and connect with your PAT |
+| "GitHub write failed: 403" | Token needs Contents + Actions write permissions |
+| No projects appearing | Run the workflow manually first (Actions tab) |
+| Scraper finds nothing | Check that your source URLs load real project listings |

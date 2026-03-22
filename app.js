@@ -3,17 +3,92 @@
    All listed projects are active & thesis-qualifying.
    ============================================ */
 
-const DATA_URL = 'data/projects.json';
-const SOURCES_URL = 'sources.json';
+const DATA_URL     = 'data/projects.json';
+const SOURCES_URL  = 'sources.json';
+const KEYWORDS_URL = 'keywords.json';
 
 let allProjects = [];
-let allSources = [];
+let allSources  = [];
+let allKeywords = {};
 let dataMetadata = {};
+
+// ---- GitHub Config (stored in localStorage) ----
+const GH_CONFIG_KEY = 'cloudberry_gh_config';
+
+function getGHConfig() {
+  try { return JSON.parse(localStorage.getItem(GH_CONFIG_KEY) || 'null'); }
+  catch { return null; }
+}
+
+function saveGHConfig(token, repo, branch) {
+  localStorage.setItem(GH_CONFIG_KEY, JSON.stringify({ token, repo, branch: branch || 'main' }));
+}
+
+async function ghReadFile(filePath) {
+  const cfg = getGHConfig();
+  if (!cfg) throw new Error('GitHub not configured. Open Sources and connect your repo first.');
+  const res = await fetch(
+    `https://api.github.com/repos/${cfg.repo}/contents/${filePath}?ref=${cfg.branch}`,
+    { headers: { Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github.v3+json' } }
+  );
+  if (!res.ok) throw new Error(`GitHub API error: ${res.status}`);
+  return res.json();
+}
+
+async function ghWriteFile(filePath, content, message, sha) {
+  const cfg = getGHConfig();
+  if (!cfg) throw new Error('GitHub not configured.');
+  // btoa with UTF-8 support
+  const encoded = btoa(unescape(encodeURIComponent(content)));
+  const res = await fetch(
+    `https://api.github.com/repos/${cfg.repo}/contents/${filePath}`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${cfg.token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message, content: encoded, sha, branch: cfg.branch }),
+    }
+  );
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`GitHub write failed: ${res.status} — ${err}`);
+  }
+  return res.json();
+}
+
+// ---- Dismissed Projects (persisted in localStorage) ----
+const DISMISSED_KEY = 'cloudberry_dismissed_projects';
+
+function getDismissedIds() {
+  try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || '[]'); }
+  catch { return []; }
+}
+function dismissProject(id) {
+  const dismissed = getDismissedIds();
+  if (!dismissed.includes(id)) {
+    dismissed.push(id);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(dismissed));
+  }
+  renderProjects();
+  updateStats();
+  showToast('Project dismissed. It won\'t appear again.');
+}
+function undismissAll() {
+  localStorage.removeItem(DISMISSED_KEY);
+  renderProjects();
+  updateStats();
+  showToast('All dismissed projects restored.');
+}
 
 // ---- Init ----
 document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
+  renderGHConfig();
   await loadSources();
+  await loadKeywords();
   await loadProjects();
 });
 
@@ -26,7 +101,17 @@ function setupEventListeners() {
   document.getElementById('closeSourcesModal').addEventListener('click', () => toggleModal('sourcesModal', false));
   document.getElementById('closeDetailModal').addEventListener('click', () => toggleModal('detailModal', false));
   document.getElementById('btnAddSource').addEventListener('click', addSource);
-  setupBulkImport();
+  document.getElementById('btnKeywords').addEventListener('click', () => toggleModal('keywordsModal', true));
+  document.getElementById('closeKeywordsModal').addEventListener('click', () => toggleModal('keywordsModal', false));
+  document.getElementById('btnAddCategory').addEventListener('click', addKeywordCategory);
+  document.getElementById('btnScrapeNow').addEventListener('click', triggerScrape);
+  document.getElementById('btnSaveGH').addEventListener('click', onSaveGHConfig);
+  document.getElementById('btnDisconnectGH').addEventListener('click', onDisconnectGH);
+
+  // Allow Enter key in add-source inputs
+  document.getElementById('newSourceUrl').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addSource();
+  });
 
   // Close modals on overlay click
   document.querySelectorAll('.modal-overlay').forEach(el => {
@@ -43,6 +128,48 @@ function setupEventListeners() {
   });
 }
 
+// ---- GitHub Config UI ----
+function renderGHConfig() {
+  const cfg = getGHConfig();
+  const setupEl = document.getElementById('ghSetup');
+  const statusEl = document.getElementById('ghConnected');
+  const repoLabel = document.getElementById('ghConnectedRepo');
+
+  if (cfg && cfg.token && cfg.repo) {
+    setupEl.style.display = 'none';
+    statusEl.style.display = '';
+    repoLabel.textContent = cfg.repo;
+  } else {
+    setupEl.style.display = '';
+    statusEl.style.display = 'none';
+  }
+}
+
+function onSaveGHConfig() {
+  const token  = document.getElementById('ghToken').value.trim();
+  const repo   = document.getElementById('ghRepo').value.trim();
+  const branch = document.getElementById('ghBranch').value.trim() || 'main';
+
+  if (!token || !repo) {
+    showToast('Please enter both a token and repository.', 'error');
+    return;
+  }
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    showToast('Repository must be in format owner/repo.', 'error');
+    return;
+  }
+
+  saveGHConfig(token, repo, branch);
+  renderGHConfig();
+  showToast('GitHub connected.', 'success');
+}
+
+function onDisconnectGH() {
+  if (!confirm('Disconnect GitHub? You will need to re-enter your token to save changes.')) return;
+  localStorage.removeItem(GH_CONFIG_KEY);
+  renderGHConfig();
+}
+
 // ---- Data Loading ----
 async function loadProjects() {
   try {
@@ -52,7 +179,7 @@ async function loadProjects() {
     allProjects = data.projects || [];
     dataMetadata = {
       by_category: data.by_category || {},
-      by_country: data.by_country || {},
+      by_country:  data.by_country  || {},
     };
     if (data.last_updated) {
       document.getElementById('lastUpdated').textContent = `Last scan: ${formatDate(data.last_updated)}`;
@@ -60,7 +187,7 @@ async function loadProjects() {
     updateStats();
     populateFilters();
     renderProjects();
-  } catch (e) {
+  } catch {
     allProjects = [];
     renderProjects();
   }
@@ -72,7 +199,7 @@ async function loadSources() {
     if (!res.ok) throw new Error('No sources');
     allSources = await res.json();
     renderSources();
-  } catch (e) {
+  } catch {
     allSources = [];
     renderSources();
   }
@@ -80,24 +207,21 @@ async function loadSources() {
 
 // ---- Stats ----
 function updateStats() {
-  const now = new Date();
-  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const dismissed = getDismissedIds();
 
-  // All projects in data are already active + thesis-qualifying
-  document.getElementById('statTotal').textContent = allProjects.length;
-  document.getElementById('statNew').textContent = allProjects.filter(p => {
-    return p.first_seen && new Date(p.first_seen) > weekAgo;
-  }).length;
+  document.getElementById('statTotal').textContent =
+    allProjects.filter(p => !dismissed.includes(p.id)).length;
+  document.getElementById('statNew').textContent =
+    allProjects.filter(p => p.first_seen && new Date(p.first_seen) > weekAgo).length;
   document.getElementById('statSources').textContent = allSources.length;
 
-  // Country breakdown
   const countries = [...new Set(allProjects.map(p => p.country).filter(Boolean))];
   document.getElementById('statCountries').textContent = countries.length;
 }
 
 // ---- Filters ----
 function populateFilters() {
-  // Country filter
   const countrySel = document.getElementById('filterCountry');
   const countries = [...new Set(allProjects.map(p => p.country).filter(Boolean))].sort();
   countrySel.innerHTML = '<option value="all">All Countries</option>';
@@ -109,7 +233,6 @@ function populateFilters() {
     countrySel.appendChild(opt);
   });
 
-  // University filter
   const uniSel = document.getElementById('filterUniversity');
   const orgs = [...new Set(allProjects.map(p => p.source_org).filter(Boolean))].sort();
   uniSel.innerHTML = '<option value="all">All Sources</option>';
@@ -122,13 +245,14 @@ function populateFilters() {
 }
 
 function getFilteredProjects() {
-  const query = document.getElementById('searchInput').value.toLowerCase().trim();
-  const country = document.getElementById('filterCountry').value;
+  const query      = document.getElementById('searchInput').value.toLowerCase().trim();
+  const country    = document.getElementById('filterCountry').value;
   const university = document.getElementById('filterUniversity').value;
-  const category = document.getElementById('filterCategory').value;
+  const category   = document.getElementById('filterCategory').value;
+  const dismissed  = getDismissedIds();
 
   return allProjects.filter(p => {
-    // Search
+    if (dismissed.includes(p.id)) return false;
     if (query) {
       const haystack = [
         p.title, p.description, p.source_org, p.contact_name, p.contact_email, p.country,
@@ -136,12 +260,9 @@ function getFilteredProjects() {
       ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(query)) return false;
     }
-    // Country
-    if (country !== 'all' && p.country !== country) return false;
-    // University
+    if (country    !== 'all' && p.country    !== country)    return false;
     if (university !== 'all' && p.source_org !== university) return false;
-    // Category
-    if (category !== 'all' && !(p.categories || []).includes(category)) return false;
+    if (category   !== 'all' && !(p.categories || []).includes(category)) return false;
     return true;
   });
 }
@@ -149,7 +270,7 @@ function getFilteredProjects() {
 // ---- Render Projects ----
 function renderProjects() {
   const container = document.getElementById('projectsContainer');
-  const filtered = getFilteredProjects();
+  const filtered  = getFilteredProjects();
 
   if (filtered.length === 0) {
     container.innerHTML = `
@@ -163,7 +284,6 @@ function renderProjects() {
     return;
   }
 
-  // Sort by relevance score (highest first), then newest
   const sorted = [...filtered].sort((a, b) => {
     const scoreA = a.relevance_score || 0;
     const scoreB = b.relevance_score || 0;
@@ -172,35 +292,42 @@ function renderProjects() {
   });
 
   container.innerHTML = sorted.map((p, i) => {
-    const now = new Date();
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const isNew = p.first_seen && new Date(p.first_seen) > weekAgo;
-    const score = p.relevance_score || 0;
+    const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const isNew   = p.first_seen && new Date(p.first_seen) > weekAgo;
+    const score   = p.relevance_score || 0;
 
     return `
-    <div class="project-card flagged" onclick="showDetail(${i})" data-index="${i}">
-      <div class="project-relevance relevant" title="Relevance score: ${score}">
-        ${score}
-      </div>
-      <div class="project-body">
-        <div class="project-header">
-          <span class="project-title">${esc(p.title || 'Untitled Project')}</span>
-          ${isNew ? '<span class="project-badge badge-new">NEW</span>' : ''}
-          ${(p.categories || []).map(c => `<span class="project-badge badge-category">${esc(categoryLabel(c))}</span>`).join('')}
-        </div>
-        <div class="project-desc">${esc(p.description || 'No description available.')}</div>
-        <div class="project-meta">
-          <span>&#127891; ${esc(p.source_org || 'Unknown')}</span>
-          <span>&#127758; ${esc(p.country || 'Finland')}</span>
-          ${p.contact_name ? `<span>&#128100; ${esc(p.contact_name)}</span>` : ''}
-          ${p.contact_email ? `<span>&#9993; ${esc(p.contact_email)}</span>` : ''}
-          ${p.first_seen ? `<span>&#128197; ${formatDate(p.first_seen)}</span>` : ''}
+    <div class="project-card flagged" data-index="${i}">
+      <button class="btn-dismiss" title="Dismiss this project" onclick="event.stopPropagation(); dismissProject('${esc(p.id)}')">&times;</button>
+      <div class="project-inner" onclick="showDetail(${i})">
+        <div class="project-relevance relevant" title="Relevance score: ${score}">${score}</div>
+        <div class="project-body">
+          <div class="project-header">
+            <span class="project-title">${esc(p.title || 'Untitled Project')}</span>
+            ${isNew ? '<span class="project-badge badge-new">NEW</span>' : ''}
+            ${(p.categories || []).map(c => `<span class="project-badge badge-category">${esc(categoryLabel(c))}</span>`).join('')}
+          </div>
+          <div class="project-desc">${esc(p.description || 'No description available.')}</div>
+          <div class="project-meta">
+            <span>&#127891; ${esc(p.source_org || 'Unknown')}</span>
+            <span>&#127758; ${esc(p.country || '—')}</span>
+            ${p.contact_name  ? `<span>&#128100; ${esc(p.contact_name)}</span>`  : ''}
+            ${p.contact_email ? `<span>&#9993; ${esc(p.contact_email)}</span>`   : ''}
+            ${p.first_seen    ? `<span>&#128197; ${formatDate(p.first_seen)}</span>` : ''}
+          </div>
         </div>
       </div>
     </div>`;
   }).join('');
 
   container._sortedData = sorted;
+
+  const dismissedCount = getDismissedIds().length;
+  const restoreBtn = document.getElementById('btnRestore');
+  if (restoreBtn) {
+    restoreBtn.style.display = dismissedCount > 0 ? '' : 'none';
+    restoreBtn.textContent = `Restore dismissed (${dismissedCount})`;
+  }
 }
 
 function showDetail(index) {
@@ -226,13 +353,13 @@ function showDetail(index) {
     </div>
     <div class="detail-section">
       <h3>Source</h3>
-      <p>${esc(p.source_org || 'Unknown')} &mdash; ${esc(p.country || 'Finland')}</p>
+      <p>${esc(p.source_org || 'Unknown')} &mdash; ${esc(p.country || '—')}</p>
     </div>
     ${p.contact_name || p.contact_email ? `
     <div class="detail-section">
       <h3>Contact</h3>
       <div class="detail-contact">
-        ${p.contact_name ? `<strong>${esc(p.contact_name)}</strong><br>` : ''}
+        ${p.contact_name  ? `<strong>${esc(p.contact_name)}</strong><br>` : ''}
         ${p.contact_email ? `<a href="mailto:${esc(p.contact_email)}">${esc(p.contact_email)}</a>` : ''}
       </div>
     </div>` : ''}
@@ -257,7 +384,7 @@ function renderSources() {
   document.getElementById('statSources').textContent = allSources.length;
 
   if (allSources.length === 0) {
-    list.innerHTML = '<p style="color:var(--muted);font-size:13px;">No sources configured yet.</p>';
+    list.innerHTML = '<p style="color:var(--muted);font-size:13px;">No URLs added yet.</p>';
     return;
   }
 
@@ -265,7 +392,6 @@ function renderSources() {
     <div class="source-item">
       <div class="source-info">
         <div class="source-name">${esc(s.name)}</div>
-        <div class="source-org">${esc(s.organization || '')} &bull; ${esc(s.country || 'Finland')} &bull; ${esc(s.type || 'university')}</div>
         <div class="source-url" title="${esc(s.url)}">${esc(s.url)}</div>
       </div>
       <button class="btn btn-danger btn-sm" onclick="removeSource(${i})">Remove</button>
@@ -275,72 +401,64 @@ function renderSources() {
 
 async function addSource() {
   const name = document.getElementById('newSourceName').value.trim();
-  const url = document.getElementById('newSourceUrl').value.trim();
-  const org = document.getElementById('newSourceOrg').value.trim();
-  const country = document.getElementById('newSourceCountry').value;
-  const type = document.getElementById('newSourceType').value;
+  const url  = document.getElementById('newSourceUrl').value.trim();
 
   if (!name || !url) {
-    showToast('Please enter both a name and URL.', 'error');
+    showToast('Please enter both a label and URL.', 'error');
     return;
   }
-
-  try {
-    new URL(url);
-  } catch {
+  try { new URL(url); } catch {
     showToast('Please enter a valid URL.', 'error');
     return;
   }
+  if (allSources.some(s => s.url === url)) {
+    showToast('This URL is already in the list.', 'error');
+    return;
+  }
 
-  const newSource = { name, url, organization: org || name, country, type };
+  const newSource = { name, url };
+  const updated   = [...allSources, newSource];
 
   try {
-    const res = await fetch('/.netlify/functions/manage-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add', source: newSource })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      allSources = data.sources || [...allSources, newSource];
-      showToast(`Added "${name}" — it will be scraped on the next Monday scan.`, 'success');
-    } else {
-      throw new Error('Function not available');
-    }
-  } catch {
-    allSources.push(newSource);
-    showToast(`Added "${name}" locally. Deploy the Netlify Function for shared persistence.`, 'success');
+    const file = await ghReadFile('sources.json');
+    await ghWriteFile(
+      'sources.json',
+      JSON.stringify(updated, null, 2),
+      `Add source: ${name}`,
+      file.sha
+    );
+    allSources = updated;
+    showToast(`Added "${name}" — will be scraped on the next Monday scan.`, 'success');
+  } catch (err) {
+    showToast(`Could not save to GitHub: ${err.message}`, 'error');
+    return;
   }
 
   renderSources();
-
   document.getElementById('newSourceName').value = '';
-  document.getElementById('newSourceUrl').value = '';
-  document.getElementById('newSourceOrg').value = '';
+  document.getElementById('newSourceUrl').value  = '';
 }
 
 async function removeSource(index) {
   const source = allSources[index];
-  if (!confirm(`Remove "${source.name}" from sources?`)) return;
+  if (!confirm(`Remove "${source.name}" from monitored URLs?`)) return;
+
+  const updated = allSources.filter((_, i) => i !== index);
 
   try {
-    const res = await fetch('/.netlify/functions/manage-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remove', index })
-    });
-    if (res.ok) {
-      const data = await res.json();
-      allSources = data.sources;
-    } else {
-      throw new Error('Function not available');
-    }
-  } catch {
-    allSources.splice(index, 1);
+    const file = await ghReadFile('sources.json');
+    await ghWriteFile(
+      'sources.json',
+      JSON.stringify(updated, null, 2),
+      `Remove source: ${source.name}`,
+      file.sha
+    );
+    allSources = updated;
+    renderSources();
+    showToast('URL removed.', 'success');
+  } catch (err) {
+    showToast(`Could not save to GitHub: ${err.message}`, 'error');
   }
-
-  renderSources();
-  showToast('Source removed.', 'success');
 }
 
 // ---- Utilities ----
@@ -365,11 +483,11 @@ function formatDate(dateStr) {
 
 function categoryLabel(cat) {
   const labels = {
-    semiconductors: 'Semiconductors',
-    photonics: 'Photonics & Optics',
-    advanced_materials: 'Advanced Materials',
-    equipment: 'Equipment & Metrology',
-    quantum: 'Quantum'
+    semiconductors:    'Semiconductors',
+    photonics:         'Photonics & Optics',
+    advanced_materials:'Advanced Materials',
+    equipment:         'Equipment & Metrology',
+    quantum:           'Quantum'
   };
   return labels[cat] || cat;
 }
@@ -379,173 +497,156 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
 }
 
-// ---- Bulk Import ----
-function setupBulkImport() {
-  const tabPaste = document.getElementById('tabPaste');
-  const tabUpload = document.getElementById('tabUpload');
-  const panelPaste = document.getElementById('panelPaste');
-  const panelUpload = document.getElementById('panelUpload');
-
-  // Tab switching
-  tabPaste.addEventListener('click', () => {
-    tabPaste.classList.add('active');
-    tabUpload.classList.remove('active');
-    panelPaste.style.display = '';
-    panelUpload.style.display = 'none';
-  });
-  tabUpload.addEventListener('click', () => {
-    tabUpload.classList.add('active');
-    tabPaste.classList.remove('active');
-    panelUpload.style.display = '';
-    panelPaste.style.display = 'none';
-  });
-
-  // Paste import
-  document.getElementById('btnBulkPaste').addEventListener('click', bulkImportFromPaste);
-
-  // File upload
-  const dropZone = document.getElementById('fileDropZone');
-  const fileInput = document.getElementById('bulkFileInput');
-  const browseLink = document.getElementById('fileBrowseLink');
-
-  browseLink.addEventListener('click', (e) => { e.preventDefault(); fileInput.click(); });
-  dropZone.addEventListener('click', () => fileInput.click());
-  dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-  dropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropZone.classList.remove('drag-over');
-    if (e.dataTransfer.files.length) handleBulkFile(e.dataTransfer.files[0]);
-  });
-  fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) handleBulkFile(fileInput.files[0]);
-  });
-  document.getElementById('btnBulkUpload').addEventListener('click', commitBulkFile);
-}
-
-let pendingBulkSources = [];
-
-function parseBulkLines(text) {
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const sources = [];
-  for (const line of lines) {
-    // Skip header rows
-    if (/^name\b/i.test(line)) continue;
-    const parts = line.split(/[,\t]/).map(s => s.trim());
-    if (parts.length < 2 || !parts[0] || !parts[1]) continue;
-    // Validate URL loosely
-    try { new URL(parts[1]); } catch { continue; }
-    sources.push({
-      name: parts[0],
-      url: parts[1],
-      organization: parts[2] || parts[0],
-      country: parts[3] || 'Finland',
-      type: parts[4] || 'university',
-    });
-  }
-  return sources;
-}
-
-function bulkImportFromPaste() {
-  const text = document.getElementById('bulkPasteInput').value.trim();
-  if (!text) { showToast('Nothing to import — paste some sources first.', 'error'); return; }
-  const parsed = parseBulkLines(text);
-  if (parsed.length === 0) { showToast('Could not parse any valid sources. Use format: name, url, org, country, type', 'error'); return; }
-  addBulkSources(parsed);
-  document.getElementById('bulkPasteInput').value = '';
-}
-
-function handleBulkFile(file) {
-  const ext = file.name.split('.').pop().toLowerCase();
-  if (['csv', 'tsv', 'txt'].includes(ext)) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const parsed = parseBulkLines(reader.result);
-      if (parsed.length === 0) { showToast('No valid sources found in file.', 'error'); return; }
-      pendingBulkSources = parsed;
-      document.getElementById('bulkFileStatus').textContent = `Found ${parsed.length} source(s) in "${file.name}"`;
-      document.getElementById('bulkFilePreview').style.display = '';
-    };
-    reader.readAsText(file);
-  } else if (['xlsx', 'xls'].includes(ext)) {
-    // Read Excel via basic parsing (ArrayBuffer → CSV-like extraction)
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = parseExcelBuffer(reader.result);
-        if (parsed.length === 0) { showToast('No valid sources found in spreadsheet.', 'error'); return; }
-        pendingBulkSources = parsed;
-        document.getElementById('bulkFileStatus').textContent = `Found ${parsed.length} source(s) in "${file.name}"`;
-        document.getElementById('bulkFilePreview').style.display = '';
-      } catch (err) {
-        showToast('Could not read spreadsheet. Please try CSV format instead.', 'error');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  } else {
-    showToast('Unsupported file type. Please use CSV, TSV, XLS, or XLSX.', 'error');
-  }
-}
-
-function parseExcelBuffer(buffer) {
-  // Lightweight XLSX parser — extracts shared strings and first sheet rows
-  // For full Excel support, users can export to CSV
+// ---- Keywords Management ----
+async function loadKeywords() {
   try {
-    // Use JSZip-like approach: XLSX is a ZIP with XML inside
-    // Fallback: try to decode as CSV if it fails
-    const bytes = new Uint8Array(buffer);
-    // Check for ZIP signature (PK)
-    if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) {
-      // Not a ZIP/XLSX — try as CSV text
-      const text = new TextDecoder().decode(buffer);
-      return parseBulkLines(text);
-    }
-    // For XLSX: we suggest CSV export since full parsing in vanilla JS is complex
-    showToast('For Excel files, please save as CSV first for most reliable import.', 'error');
-    return [];
+    const res = await fetch(KEYWORDS_URL);
+    if (!res.ok) throw new Error('No keywords');
+    allKeywords = await res.json();
+    renderKeywords();
+    populateCategoryFilter();
   } catch {
-    return [];
+    allKeywords = {};
   }
 }
 
-function commitBulkFile() {
-  if (pendingBulkSources.length === 0) { showToast('No sources to import.', 'error'); return; }
-  addBulkSources(pendingBulkSources);
-  pendingBulkSources = [];
-  document.getElementById('bulkFilePreview').style.display = 'none';
-  document.getElementById('bulkFileInput').value = '';
+function populateCategoryFilter() {
+  const sel = document.getElementById('filterCategory');
+  sel.innerHTML = '<option value="all">All Categories</option>';
+  Object.keys(allKeywords).forEach(cat => {
+    const opt = document.createElement('option');
+    opt.value = cat;
+    opt.textContent = categoryLabel(cat);
+    sel.appendChild(opt);
+  });
 }
 
-async function addBulkSources(newSources) {
-  // Deduplicate against existing sources
-  const existingUrls = new Set(allSources.map(s => s.url));
-  const unique = newSources.filter(s => !existingUrls.has(s.url));
-  const dupeCount = newSources.length - unique.length;
+function renderKeywords() {
+  const container = document.getElementById('keywordCategories');
+  if (!container) return;
+  container.innerHTML = Object.keys(allKeywords).map(cat => {
+    const label    = cat.replace(/_/g, ' ');
+    const keywords = allKeywords[cat] || [];
+    return `
+    <div class="keyword-category" data-cat="${esc(cat)}">
+      <div class="keyword-category-header">
+        <h4>${esc(label)} (${keywords.length})</h4>
+        <button class="btn-remove-cat" onclick="removeKeywordCategory('${esc(cat)}')">Remove category</button>
+      </div>
+      <div class="keyword-tags">
+        ${keywords.map(kw => `
+          <span class="keyword-tag">
+            ${esc(kw)}
+            <button class="tag-remove" onclick="removeKeyword('${esc(cat)}','${esc(kw)}')">&times;</button>
+          </span>
+        `).join('')}
+      </div>
+      <div class="keyword-add-row">
+        <input type="text" placeholder="Add keyword..." id="kwInput_${esc(cat)}" onkeydown="if(event.key==='Enter')addKeyword('${esc(cat)}')">
+        <button class="btn btn-primary btn-sm" onclick="addKeyword('${esc(cat)}')">Add</button>
+      </div>
+    </div>`;
+  }).join('');
+}
 
-  if (unique.length === 0) {
-    showToast(`All ${newSources.length} source(s) already exist.`, 'error');
+async function saveKeywords() {
+  try {
+    const file = await ghReadFile('keywords.json');
+    await ghWriteFile(
+      'keywords.json',
+      JSON.stringify(allKeywords, null, 2),
+      'Update thesis keywords via Radar UI',
+      file.sha
+    );
+  } catch {
+    // Silently fail — keywords still updated in memory for display
+  }
+}
+
+function addKeyword(cat) {
+  const input = document.getElementById(`kwInput_${cat}`);
+  if (!input) return;
+  const kw = input.value.trim().toLowerCase();
+  if (!kw) return;
+  if (!allKeywords[cat]) allKeywords[cat] = [];
+  if (allKeywords[cat].includes(kw)) {
+    showToast('Keyword already exists in this category.', 'error');
+    return;
+  }
+  allKeywords[cat].push(kw);
+  input.value = '';
+  renderKeywords();
+  saveKeywords();
+  showToast(`Added "${kw}" to ${cat.replace(/_/g, ' ')}.`);
+}
+
+function removeKeyword(cat, kw) {
+  if (!allKeywords[cat]) return;
+  allKeywords[cat] = allKeywords[cat].filter(k => k !== kw);
+  renderKeywords();
+  saveKeywords();
+  showToast(`Removed "${kw}" from ${cat.replace(/_/g, ' ')}.`);
+}
+
+function addKeywordCategory() {
+  const input = document.getElementById('newCategoryName');
+  const name  = input.value.trim().toLowerCase().replace(/\s+/g, '_');
+  if (!name) return;
+  if (allKeywords[name]) {
+    showToast('Category already exists.', 'error');
+    return;
+  }
+  allKeywords[name] = [];
+  input.value = '';
+  renderKeywords();
+  saveKeywords();
+  showToast(`Category "${name.replace(/_/g, ' ')}" created. Add keywords to it!`);
+}
+
+function removeKeywordCategory(cat) {
+  if (!confirm(`Remove the entire "${cat.replace(/_/g, ' ')}" category and all its keywords?`)) return;
+  delete allKeywords[cat];
+  renderKeywords();
+  saveKeywords();
+  showToast(`Category "${cat.replace(/_/g, ' ')}" removed.`);
+}
+
+// ---- Scrape Now ----
+async function triggerScrape() {
+  const cfg = getGHConfig();
+  if (!cfg) {
+    showToast('Connect GitHub first (open Sources).', 'error');
     return;
   }
 
-  try {
-    const res = await fetch('/.netlify/functions/manage-sources', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'bulk_add', sources: unique }),
-    });
-    if (res.ok) {
-      const data = await res.json();
-      allSources = data.sources || [...allSources, ...unique];
-    } else {
-      throw new Error('Function not available');
-    }
-  } catch {
-    allSources.push(...unique);
-  }
+  const btn = document.getElementById('btnScrapeNow');
+  btn.disabled = true;
+  btn.textContent = 'Triggering...';
 
-  renderSources();
-  const msg = `Imported ${unique.length} source(s).${dupeCount > 0 ? ` ${dupeCount} duplicate(s) skipped.` : ''}`;
-  showToast(msg, 'success');
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${cfg.repo}/actions/workflows/scrape.yml/dispatches`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cfg.token}`,
+          Accept: 'application/vnd.github.v3+json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ ref: cfg.branch }),
+      }
+    );
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`${res.status} ${errText}`);
+    }
+    showToast('Scrape triggered! Takes a few minutes. Refresh the page afterwards.');
+  } catch (err) {
+    showToast('Could not trigger scrape: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scrape Now';
+  }
 }
 
 function showToast(msg, type = 'success') {

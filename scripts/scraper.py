@@ -21,67 +21,20 @@ from bs4 import BeautifulSoup
 
 # ──────────────────────────────────────────────
 # CLOUDBERRY THESIS KEYWORDS
-# Grouped by category for classification
+# Loaded from keywords.json so the UI can also manage them
 # ──────────────────────────────────────────────
 
-KEYWORD_MAP = {
-    "semiconductors": [
-        "semiconductor", "semiconductors", "silicon", "wafer", "chip", "chips",
-        "integrated circuit", "ic design", "cmos", "mosfet", "transistor",
-        "lithography", "etching", "doping", "epitaxy", "fab", "fabrication",
-        "soc", "system-on-chip", "asic", "fpga", "mems", "nems",
-        "gan", "gallium nitride", "sic", "silicon carbide", "gaas",
-        "gallium arsenide", "inp", "indium phosphide", "wide bandgap",
-        "compound semiconductor", "iii-v", "ii-vi", "power electronics",
-        "rf devices", "microelectronics", "nanoelectronics", "packaging",
-        "heterogeneous integration", "chiplet", "advanced packaging",
-        "back-end-of-line", "front-end-of-line", "beol", "feol",
-    ],
-    "photonics": [
-        "photonic", "photonics", "optical", "optics", "laser", "lasers",
-        "led", "photodetector", "photodiode", "waveguide", "fiber optic",
-        "fibre optic", "lidar", "silicon photonics", "integrated photonics",
-        "photonic integrated circuit", "pic", "optical fiber", "optical sensor",
-        "spectroscopy", "infrared", "ultraviolet", "uv", "visible light",
-        "optical communication", "optical computing", "holograph",
-        "diffractive", "refractive", "lens", "mirror", "grating",
-        "modulator", "optical switch", "vcsel", "quantum dot laser",
-        "terahertz", "thz",
-    ],
-    "advanced_materials": [
-        "advanced material", "advanced materials", "nanomaterial",
-        "nanomaterials", "thin film", "thin films", "coating", "coatings",
-        "2d material", "graphene", "boron nitride", "mos2", "transition metal",
-        "perovskite", "ceramic", "ceramics", "composite", "composites",
-        "metamaterial", "polymer", "functional material", "smart material",
-        "superconductor", "superconducting", "piezoelectric", "ferroelectric",
-        "magnetic material", "spintronics", "topological", "biomaterial",
-        "crystal growth", "single crystal", "polycrystalline", "amorphous",
-        "nanoparticle", "nanostructure", "nanofiber", "nanotube",
-        "carbon nanotube", "cnt", "quantum dot", "colloidal",
-    ],
-    "equipment": [
-        "equipment", "metrology", "inspection", "deposition", "sputtering",
-        "evaporation", "ald", "atomic layer deposition", "cvd",
-        "chemical vapor deposition", "pvd", "physical vapor deposition",
-        "ion beam", "plasma", "etch", "clean room", "cleanroom",
-        "characterization", "microscopy", "sem", "tem", "afm",
-        "scanning electron", "transmission electron", "atomic force",
-        "x-ray diffraction", "xrd", "raman", "ellipsometry",
-        "profilometry", "interferometry", "mass spectrometry",
-        "spectrometer", "detector", "sensor fabrication",
-        "process control", "yield management", "wafer inspection",
-    ],
-    "quantum": [
-        "quantum", "qubit", "quantum computing", "quantum computer",
-        "quantum sensing", "quantum communication", "quantum cryptography",
-        "quantum key distribution", "qkd", "quantum network",
-        "quantum simulation", "quantum algorithm", "quantum error",
-        "quantum entanglement", "quantum coherence", "quantum dot",
-        "superconducting qubit", "trapped ion", "topological qubit",
-        "quantum photonic", "quantum advantage", "nisq",
-    ],
-}
+KEYWORDS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'keywords.json')
+
+def load_keywords():
+    try:
+        with open(KEYWORDS_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"[ERROR] Could not load keywords.json: {e}")
+        sys.exit(1)
+
+KEYWORD_MAP = load_keywords()
 
 # Minimum keyword matches required for a project to qualify.
 # A single generic hit (e.g. "silicon" in a biology context) is not enough.
@@ -258,24 +211,42 @@ def extract_projects_generic(soup, base_url, source):
                 '_status_text': '',
             })
 
-    # Strategy 3: Link-based fallback
+    # Strategy 3: Link-based fallback — broader matching for project-style URLs
     if not projects:
         seen_titles = set()
-        for link_el in soup.select('main a, .content a, #content a'):
+        seen_urls = set()
+        PROJECT_URL_HINTS = [
+            'project', 'research', 'tutkimus', 'hanke', 'forskning', 'projekt',
+            'r2b', 'tutli', 'pre-commerci', 'innovation', 'startup',
+        ]
+        for link_el in soup.select('a[href]'):
             href = link_el.get('href', '')
             text = link_el.get_text(strip=True)
-            if len(text) > 10 and len(text) < 200 and text not in seen_titles:
-                if any(kw in href.lower() for kw in ['project', 'research', 'tutkimus', 'hanke', 'forskning', 'projekt']):
-                    seen_titles.add(text)
-                    projects.append({
-                        'title': text,
-                        'description': '',
-                        'url': urljoin(base_url, href),
-                        'contact_name': '',
-                        'contact_email': '',
-                        '_date_text': '',
-                        '_status_text': '',
-                    })
+            full_url = urljoin(base_url, href)
+            if len(text) < 5 or len(text) > 200:
+                continue
+            if text in seen_titles or full_url in seen_urls:
+                continue
+            href_lower = href.lower()
+            # Skip nav, footer, social, image links
+            if any(skip in href_lower for skip in [
+                'login', 'sign-in', 'cookie', 'privacy', 'contact-us',
+                'facebook', 'twitter', 'linkedin', 'instagram', 'youtube',
+                '.jpg', '.png', '.pdf', '#', 'javascript:',
+            ]):
+                continue
+            if any(kw in href_lower for kw in PROJECT_URL_HINTS):
+                seen_titles.add(text)
+                seen_urls.add(full_url)
+                projects.append({
+                    'title': text,
+                    'description': '',
+                    'url': full_url,
+                    'contact_name': '',
+                    'contact_email': '',
+                    '_date_text': '',
+                    '_status_text': '',
+                })
 
     return projects
 
@@ -400,10 +371,22 @@ def main():
                 raw['title'], raw.get('description', '')
             )
 
-            # If zero keyword hits from title+desc, skip entirely (no detail fetch)
+            # If zero keyword hits AND the URL doesn't hint at a relevant project,
+            # skip to avoid fetching thousands of unrelated detail pages.
+            # But if the URL contains thesis-related terms, still fetch the detail page.
             if quick_score == 0:
-                stats['skipped_irrelevant'] += 1
-                continue
+                url_lower = raw.get('url', '').lower()
+                title_lower = raw.get('title', '').lower()
+                URL_RELEVANCE_HINTS = [
+                    'photon', 'optic', 'laser', 'semiconductor', 'quantum',
+                    'nano', 'material', 'chip', 'wafer', 'sensor', 'metrol',
+                    'r2b', 'pre-commerci', 'tutli', 'erc', 'deep-tech',
+                    'deeptech', 'commerciali',
+                ]
+                has_url_hint = any(h in url_lower or h in title_lower for h in URL_RELEVANCE_HINTS)
+                if not has_url_hint:
+                    stats['skipped_irrelevant'] += 1
+                    continue
 
             # ── Step 2: Fetch detail page for borderline/qualifying projects ──
             detail_text = ''

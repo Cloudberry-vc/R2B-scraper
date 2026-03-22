@@ -5,11 +5,13 @@ on:
   schedule:
     - cron: '0 7 * * 1'
 
-  # Allow manual trigger
+  # Allow manual trigger from the UI ("Scrape Now" button)
   workflow_dispatch:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 jobs:
   scrape:
@@ -26,8 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          pip install requests beautifulsoup4
+        run: pip install requests beautifulsoup4
 
       - name: Run scraper
         run: python scripts/scraper.py
@@ -37,7 +38,6 @@ jobs:
           git config user.name "Cloudberry Radar Bot"
           git config user.email "radar@cloudberry.vc"
           git add data/projects.json
-          # Only commit if there are changes
           if git diff --cached --quiet; then
             echo "No changes to commit."
           else
