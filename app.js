@@ -217,7 +217,7 @@ async function loadProjects() {
     const data = await res.json();
     allProjects = data.projects || [];
     if (data.last_updated) {
-      document.getElementById('lastUpdated').textContent = `Last scan: ${formatDate(data.last_updated)}`;
+      document.getElementById('lastUpdated').textContent = `Last scan: ${formatDate(data.last_updated, true)}`;
     }
     updateStats();
     updateTabCounts();
@@ -580,10 +580,14 @@ function esc(str) {
   return div.innerHTML;
 }
 
-function formatDate(dateStr) {
+function formatDate(dateStr, includeTime = false) {
   if (!dateStr) return '—';
   try {
-    return new Date(dateStr).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const d = new Date(dateStr);
+    const date = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    if (!includeTime) return date;
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
   } catch { return dateStr; }
 }
 
